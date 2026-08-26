@@ -13,7 +13,7 @@ canvas{display:block;position:absolute;top:50%;left:50%;transform:translate(-50%
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="controls">P1: WASD + J/K/L &nbsp;|&nbsp; P2/Menu: Arrows + Num1/2/3 &nbsp;|&nbsp; Enter: confirm &nbsp;|&nbsp; Touch: on-screen buttons</div>
+<div id="controls">P1: WASD + J/K/L &nbsp;|&nbsp; P2/Menu: Arrows + Num1/2/3 &nbsp;|&nbsp; Enter: confirm &nbsp;|&nbsp; Space: pause &nbsp;|&nbsp; Touch: on-screen</div>
 <script>
 'use strict';
 
@@ -241,33 +241,72 @@ addEventListener('keyup', e => { keys[e.code] = false; });
 function wasPressed(code) { return !!justPressed[code]; }
 function isDown(code) { return !!keys[code]; }
 function clearJustPressed() { for (const k in justPressed) delete justPressed[k]; }
+function lastKeyPressed() {
+  for (const k in justPressed) { if (justPressed[k]) return k; }
+  return null;
+}
 
-// P1 controls
+const DEFAULT_BINDINGS = {
+  p1: { left:'KeyA', right:'KeyD', up:'KeyW', down:'KeyS', light:'KeyJ', heavy:'KeyK', special:'KeyL' },
+  p2: { left:'ArrowLeft', right:'ArrowRight', up:'ArrowUp', down:'ArrowDown', light:'Numpad1', heavy:'Numpad2', special:'Numpad3' },
+};
+const P2_ALT = { light:'Digit1', heavy:'Digit2', special:'Digit3' };
+
+let bindings = loadBindings();
+function loadBindings() {
+  try {
+    const s = localStorage.getItem('catfighter_bindings');
+    if (s) {
+      const b = JSON.parse(s);
+      if (b.p1 && b.p2) return b;
+    }
+  } catch(e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
+}
+function saveBindings() {
+  try { localStorage.setItem('catfighter_bindings', JSON.stringify(bindings)); } catch(e) {}
+}
+
+const ACTIONS = ['left','right','up','down','light','heavy','special'];
+const ACTION_LABELS = { left:'Move Left', right:'Move Right', up:'Jump', down:'Crouch', light:'Light Attack', heavy:'Heavy Attack', special:'Special' };
+const KEY_DISPLAY = {
+  KeyA:'A',KeyB:'B',KeyC:'C',KeyD:'D',KeyE:'E',KeyF:'F',KeyG:'G',KeyH:'H',KeyI:'I',KeyJ:'J',KeyK:'K',KeyL:'L',KeyM:'M',
+  KeyN:'N',KeyO:'O',KeyP:'P',KeyQ:'Q',KeyR:'R',KeyS:'S',KeyT:'T',KeyU:'U',KeyV:'V',KeyW:'W',KeyX:'X',KeyY:'Y',KeyZ:'Z',
+  ArrowLeft:'←',ArrowRight:'→',ArrowUp:'↑',ArrowDown:'↓',
+  Numpad0:'Num0',Numpad1:'Num1',Numpad2:'Num2',Numpad3:'Num3',Numpad4:'Num4',Numpad5:'Num5',
+  Numpad6:'Num6',Numpad7:'Num7',Numpad8:'Num8',Numpad9:'Num9',
+  Digit0:'0',Digit1:'1',Digit2:'2',Digit3:'3',Digit4:'4',Digit5:'5',Digit6:'6',Digit7:'7',Digit8:'8',Digit9:'9',
+  Comma:',',Period:'.',Slash:'/',Semicolon:';',Quote:"'",BracketLeft:'[',BracketRight:']',Backslash:'\\',
+  Minus:'-',Equal:'=',Backquote:'`',
+  ShiftLeft:'LShift',ShiftRight:'RShift',ControlLeft:'LCtrl',ControlRight:'RCtrl',AltLeft:'LAlt',AltRight:'RAlt',
+  Tab:'Tab',CapsLock:'Caps',
+};
+function keyName(code) { return KEY_DISPLAY[code] || code.replace('Key','').replace('Arrow',''); }
+
 const P1 = {
-  left: () => isDown('KeyA'),
-  right: () => isDown('KeyD'),
-  up: () => isDown('KeyW'),
-  down: () => isDown('KeyS'),
-  light: () => wasPressed('KeyJ'),
-  heavy: () => wasPressed('KeyK'),
-  special: () => wasPressed('KeyL'),
+  left: () => isDown(bindings.p1.left),
+  right: () => isDown(bindings.p1.right),
+  up: () => isDown(bindings.p1.up),
+  down: () => isDown(bindings.p1.down),
+  light: () => wasPressed(bindings.p1.light),
+  heavy: () => wasPressed(bindings.p1.heavy),
+  special: () => wasPressed(bindings.p1.special),
 };
 
-// P2 controls
 const P2 = {
-  left: () => isDown('ArrowLeft'),
-  right: () => isDown('ArrowRight'),
-  up: () => isDown('ArrowUp'),
-  down: () => isDown('ArrowDown'),
-  light: () => wasPressed('Numpad1') || wasPressed('Digit1'),
-  heavy: () => wasPressed('Numpad2') || wasPressed('Digit2'),
-  special: () => wasPressed('Numpad3') || wasPressed('Digit3'),
+  left: () => isDown(bindings.p2.left),
+  right: () => isDown(bindings.p2.right),
+  up: () => isDown(bindings.p2.up),
+  down: () => isDown(bindings.p2.down),
+  light: () => wasPressed(bindings.p2.light) || wasPressed(P2_ALT.light),
+  heavy: () => wasPressed(bindings.p2.heavy) || wasPressed(P2_ALT.heavy),
+  special: () => wasPressed(bindings.p2.special) || wasPressed(P2_ALT.special),
 };
 
 // Touch state
-const touch = { left:false, right:false, up:false, down:false, light:false, heavy:false, special:false, any:false, confirm:false };
+const touch = { left:false, right:false, up:false, down:false, light:false, heavy:false, special:false, any:false, confirm:false, pause:false };
 let touchActive = false;
-const touchJust = { light:false, heavy:false, special:false, confirm:false };
+const touchJust = { light:false, heavy:false, special:false, confirm:false, pause:false };
 
 const TBTN = [
   { id:'left',  x:90,  y:H-85, r:32 },
@@ -278,6 +317,7 @@ const TBTN = [
   { id:'heavy', x:W-105, y:H-65, r:36, label:'H' },
   { id:'special',x:W-145,y:H-130,r:30, label:'S' },
   { id:'confirm',x:W/2,  y:H-65, r:28, label:'OK' },
+  { id:'pause',  x:W/2,  y:28,   r:20, label:'II' },
 ];
 
 function handleTouches(e) {
@@ -285,7 +325,7 @@ function handleTouches(e) {
   ensureAudio();
   touchActive = true;
   const prev = {};
-  for (const k of ['light','heavy','special','confirm']) prev[k] = touch[k];
+  for (const k of ['light','heavy','special','confirm','pause']) prev[k] = touch[k];
   for (const k in touch) touch[k] = false;
   const rect = canvas.getBoundingClientRect();
   for (const t of e.touches) {
@@ -298,7 +338,7 @@ function handleTouches(e) {
       }
     }
   }
-  for (const k of ['light','heavy','special','confirm']) {
+  for (const k of ['light','heavy','special','confirm','pause']) {
     if (touch[k] && !prev[k]) touchJust[k] = true;
   }
 }
@@ -1728,10 +1768,14 @@ const game = {
   matchWinner: 0,
   winStreak: 0,
   p1Confirmed: false, p2Confirmed: false,
+  pauseMenu: 0,
+  controlsPlayer: 0,
+  controlsAction: 0,
+  controlsWaiting: false,
 };
 
 function confirm() {
-  return wasPressed('Enter') || wasPressed('Space') || wasPressed('NumpadEnter') || touchJust.confirm;
+  return wasPressed('Enter') || wasPressed('NumpadEnter') || touchJust.confirm;
 }
 
 function updateTitle() {
@@ -1855,6 +1899,13 @@ function updateRoundIntro() {
 }
 
 function updateFighting() {
+  if (wasPressed('Space') || wasPressed('Escape') || touchJust.pause) {
+    game.state = 'paused';
+    game.pauseMenu = 0;
+    SFX.select();
+    return;
+  }
+
   // hit pause
   if (game.hitPause > 0) {
     game.hitPause--;
@@ -1893,6 +1944,95 @@ function updateFighting() {
   else if (game.f2.hp <= 0) endRound(1);
 
   updateParticles();
+}
+
+function updatePaused() {
+  const MENU_ITEMS = ['Resume', 'Configure Controls', 'Quit to Menu'];
+  if (wasPressed('KeyW') || wasPressed('ArrowUp') || (touchJust.light && touch.up)) {
+    game.pauseMenu = (game.pauseMenu + MENU_ITEMS.length - 1) % MENU_ITEMS.length;
+    SFX.move();
+  }
+  if (wasPressed('KeyS') || wasPressed('ArrowDown') || (touchJust.light && touch.down)) {
+    game.pauseMenu = (game.pauseMenu + 1) % MENU_ITEMS.length;
+    SFX.move();
+  }
+  if (wasPressed('Space') || wasPressed('Escape') || touchJust.pause) {
+    game.state = 'fighting';
+    SFX.select();
+    return;
+  }
+  if (confirm()) {
+    if (game.pauseMenu === 0) {
+      game.state = 'fighting';
+      SFX.select();
+    } else if (game.pauseMenu === 1) {
+      game.state = 'controls';
+      game.controlsPlayer = 0;
+      game.controlsAction = 0;
+      game.controlsWaiting = false;
+      SFX.select();
+    } else if (game.pauseMenu === 2) {
+      game.state = 'title';
+      particles.length = 0;
+      shakeAmt = 0;
+      SFX.select();
+    }
+  }
+}
+
+function updateControls() {
+  if (game.controlsWaiting) {
+    const k = lastKeyPressed();
+    if (k && k !== 'Escape' && k !== 'Space') {
+      const player = game.controlsPlayer === 0 ? 'p1' : 'p2';
+      const action = ACTIONS[game.controlsAction];
+      bindings[player][action] = k;
+      saveBindings();
+      game.controlsWaiting = false;
+      SFX.select();
+    }
+    if (wasPressed('Escape')) {
+      game.controlsWaiting = false;
+      SFX.move();
+    }
+    return;
+  }
+
+  if (wasPressed('Escape') || wasPressed('Space') || touchJust.pause) {
+    game.state = 'paused';
+    SFX.move();
+    return;
+  }
+
+  // navigate actions
+  if (wasPressed('KeyW') || wasPressed('ArrowUp')) {
+    game.controlsAction = (game.controlsAction + ACTIONS.length - 1) % ACTIONS.length;
+    SFX.move();
+  }
+  if (wasPressed('KeyS') || wasPressed('ArrowDown')) {
+    game.controlsAction = (game.controlsAction + 1) % ACTIONS.length;
+    SFX.move();
+  }
+  // switch player tabs
+  if (wasPressed('KeyA') || wasPressed('ArrowLeft')) {
+    game.controlsPlayer = 0;
+    SFX.move();
+  }
+  if (wasPressed('KeyD') || wasPressed('ArrowRight')) {
+    game.controlsPlayer = 1;
+    SFX.move();
+  }
+  // begin rebinding
+  if (confirm()) {
+    game.controlsWaiting = true;
+    SFX.select();
+  }
+  // reset to defaults
+  if (wasPressed('KeyR')) {
+    bindings = JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
+    saveBindings();
+    SFX.bell();
+  }
 }
 
 function endRound(winner) {
@@ -2034,6 +2174,103 @@ function drawMatchEnd() {
   }
 }
 
+function drawPaused() {
+  ctx.fillStyle = 'rgba(10,10,20,0.65)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.font = 'bold 42px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = P.gold;
+  ctx.shadowColor = P.gold;
+  ctx.shadowBlur = 15;
+  ctx.fillText('PAUSED', W/2, 120);
+  ctx.shadowBlur = 0;
+
+  const items = ['Resume', 'Configure Controls', 'Quit to Menu'];
+  ctx.font = 'bold 22px monospace';
+  for (let i = 0; i < items.length; i++) {
+    const y = 210 + i * 50;
+    const sel = i === game.pauseMenu;
+    if (sel) {
+      roundRect(ctx, W/2 - 180, y - 18, 360, 40, 8);
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fill();
+      ctx.fillStyle = P.gold;
+      ctx.fillText('▸ ' + items[i], W/2, y + 6);
+    } else {
+      ctx.fillStyle = '#888';
+      ctx.fillText(items[i], W/2, y + 6);
+    }
+  }
+
+  ctx.font = '14px monospace';
+  ctx.fillStyle = '#555';
+  ctx.fillText('SPACE / ESC to resume', W/2, H - 40);
+}
+
+function drawControls() {
+  ctx.fillStyle = 'rgba(10,10,20,0.8)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.font = 'bold 32px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = P.gold;
+  ctx.shadowColor = P.gold;
+  ctx.shadowBlur = 12;
+  ctx.fillText('CONFIGURE CONTROLS', W/2, 60);
+  ctx.shadowBlur = 0;
+
+  // player tabs
+  const tabW = 160, tabH = 36, tabY = 85;
+  for (let p = 0; p < 2; p++) {
+    const tx = W/2 + (p === 0 ? -tabW - 8 : 8);
+    const sel = p === game.controlsPlayer;
+    roundRect(ctx, tx, tabY, tabW, tabH, 6);
+    ctx.fillStyle = sel ? (p === 0 ? P.p1 : P.p2) : '#222';
+    ctx.fill();
+    ctx.font = 'bold 16px monospace';
+    ctx.fillStyle = sel ? '#fff' : '#666';
+    ctx.fillText(p === 0 ? 'PLAYER 1' : 'PLAYER 2', tx + tabW/2, tabY + tabH/2 + 5);
+  }
+
+  // action list
+  const player = game.controlsPlayer === 0 ? 'p1' : 'p2';
+  ctx.textAlign = 'left';
+  const startY = 155;
+  for (let i = 0; i < ACTIONS.length; i++) {
+    const y = startY + i * 42;
+    const sel = i === game.controlsAction;
+    const waiting = sel && game.controlsWaiting;
+
+    if (sel) {
+      roundRect(ctx, W/2 - 240, y - 4, 480, 34, 6);
+      ctx.fillStyle = waiting ? 'rgba(255,200,50,0.12)' : 'rgba(255,255,255,0.06)';
+      ctx.fill();
+    }
+
+    ctx.font = sel ? 'bold 18px monospace' : '18px monospace';
+    ctx.fillStyle = sel ? P.gold : '#aaa';
+    ctx.fillText(ACTION_LABELS[ACTIONS[i]], W/2 - 220, y + 18);
+
+    ctx.textAlign = 'right';
+    if (waiting) {
+      const blink = Math.floor(game.frame / 15) % 2 === 0;
+      ctx.fillStyle = blink ? P.ko : P.gold;
+      ctx.fillText('Press a key...', W/2 + 220, y + 18);
+    } else {
+      ctx.fillStyle = sel ? '#fff' : '#888';
+      ctx.fillText(keyName(bindings[player][ACTIONS[i]]), W/2 + 220, y + 18);
+    }
+    ctx.textAlign = 'left';
+  }
+
+  // footer hints
+  ctx.textAlign = 'center';
+  ctx.font = '13px monospace';
+  ctx.fillStyle = '#555';
+  ctx.fillText('↑↓ select  ←→ switch player  ENTER rebind  R reset defaults  ESC back', W/2, H - 40);
+}
+
 // ═══════════════════════════════════════════════════════════════════
 //  High Score
 // ═══════════════════════════════════════════════════════════════════
@@ -2081,6 +2318,8 @@ function tick() {
     case 'charSelect': updateCharSelect(); break;
     case 'roundIntro': updateRoundIntro(); break;
     case 'fighting': updateFighting(); break;
+    case 'paused': updatePaused(); break;
+    case 'controls': updateControls(); break;
     case 'roundEnd': updateRoundEnd(); break;
     case 'matchEnd': updateMatchEnd(); break;
   }
@@ -2116,6 +2355,20 @@ function render() {
       drawCat(game.f2);
       drawParticles();
       drawHUD();
+      break;
+    case 'paused':
+      drawStage();
+      drawCat(game.f1);
+      drawCat(game.f2);
+      drawHUD();
+      drawPaused();
+      break;
+    case 'controls':
+      drawStage();
+      drawCat(game.f1);
+      drawCat(game.f2);
+      drawHUD();
+      drawControls();
       break;
     case 'roundEnd':
       drawStage();
