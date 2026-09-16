@@ -1,0 +1,126 @@
+{
+  "id": "siamese",
+  "name": "VEX",
+  "title": "The Stiletto",
+  "desc": "Neon-lit assassin. Kills clean.",
+  "lore": "Born in the back rooms of an underground techno club. Vex learned to fight in strobe lights — every movement is rhythmic, precise, lethal. Rumored to have never been hit clean in a ranked match. Wears her kills as tally marks etched into her collar.",
+
+  "personality": "Cold, surgical, vain. Moves like she knows she's being watched. Never wastes a motion. Talks in clipped, dismissive one-liners.",
+
+  "visualDesign": {
+    "silhouette": "Sleek and elongated. Long limbs, narrow waist, exaggerated leg-to-body ratio. Built for speed — anime-proportioned agility type.",
+    "furBase": "Jet black with a subtle blue-purple sheen in the light, like raven feathers",
+    "furAccents": "Siamese-style point markings but in deep indigo instead of brown. Gradient fade from black body into indigo at extremities (paws, ears, muzzle, tail tip).",
+    "underbelly": "Charcoal with faint purple tint",
+    "scars": [],
+    "eyes": {
+      "color": "#FF0066",
+      "shape": "Sharp, angular, almost feline-anime. Slightly upturned at outer corners. Heavy eyeliner effect — dark fur naturally creates a winged-liner look.",
+      "glow": true,
+      "glowColor": "Hot pink, intensifies during special moves, leaves brief afterimage trails during shadow dash"
+    },
+    "nose": "#2A0A20",
+    "innerEar": "#FF0066",
+    "accessories": [
+      "Thin spiked choker with a single dangling razor blade charm",
+      "Fishnet pattern shaved into the fur on both forearms",
+      "Tally marks — small notches carved into the choker's leather, 12 visible",
+      "Small nose piercing — silver stud on the left nostril"
+    ],
+    "tail": "Long, whip-thin, prehensile-looking. Tip fades to deep indigo. Moves in sharp, deliberate arcs — never lazy swaying.",
+    "expression": "Half-lidded, unimpressed. Slight smirk. One fang barely visible."
+  },
+
+  "colorPalette": {
+    "body": "#1A1028",
+    "dark": "#2D1B4E",
+    "light": "#2A1838",
+    "eye": "#FF0066",
+    "nose": "#2A0A20",
+    "inner": "#FF0066",
+    "stripe": null,
+    "choker": "#0A0A0A",
+    "chokerSpikes": "#C0C0C0",
+    "razorCharm": "#D0D0D0",
+    "fishnetShave": "#3A2858",
+    "indigoPoints": "#3D1F6D"
+  },
+
+  "proportions": {
+    "bodyRX": 18,
+    "bodyRY": 21,
+    "headR": 19,
+    "earH": 17,
+    "earW": 12,
+    "eyeR": 4.5,
+    "pawR": 5.5,
+    "tailThick": 3.5
+  },
+
+  "traits": {
+    "fluffy": false,
+    "mane": false,
+    "stripes": false,
+    "wrinkles": false,
+    "points": true,
+    "earTufts": false,
+    "bigEars": false,
+    "choker": true,
+    "fishnetFur": true,
+    "nosePiercing": true,
+    "razorCharm": true,
+    "eyeTrails": true
+  },
+
+  "stats": {
+    "hp": 90,
+    "speed": 5.5,
+    "jumpForce": -12.5,
+    "weight": 0.85
+  },
+
+  "attacks": {
+    "light": {
+      "name": "Flicker Jab",
+      "animation": "Lightning-fast straight claw thrust. Arm fully extends with claws spread. Motion blur / afterimage on the paw. Almost too fast to see.",
+      "startup": 2,
+      "active": 3,
+      "recovery": 5,
+      "damage": 7,
+      "knockback": 3,
+      "hitboxRX": 42,
+      "hitboxRY": 26
+    },
+    "heavy": {
+      "name": "Crescent Fang",
+      "animation": "Spinning heel kick (back paw). Body rotates 270 degrees, tail whips around as a secondary visual. Leaves a pink arc trail.",
+      "startup": 5,
+      "active": 4,
+      "recovery": 9,
+      "damage": 14,
+      "knockback": 7,
+      "hitboxRX": 52,
+      "hitboxRY": 30
+    },
+    "special": {
+      "type": "shadowDash",
+      "name": "Phantom Rush",
+      "animation": "Body dissolves into a streak of hot pink and black. Phases through opponent, reappears behind them. Slash marks appear on opponent with 2-frame delay (freeze-frame hit). Afterimages trail behind in decreasing opacity.",
+      "damage": 22,
+      "visualEffect": "Pink-black streak with afterimages. Hit produces an X-shaped slash mark that lingers for 15 frames before fading."
+    }
+  },
+
+  "animationNotes": {
+    "idle": "Weight shifts between feet like a boxer. Arms held loose at sides, claws slightly extended. Tail sways in figure-eight pattern. Head tilts slightly — studying the opponent.",
+    "walk": "Prowling gait, almost a runway strut. Hips sway, feet cross over slightly. Silent and deliberate.",
+    "jump": "Aerial flip — tucks, rotates, extends into a diving position. Tail spirals behind.",
+    "crouch": "One knee down, other foot planted. One paw on the ground for balance, other arm back — sprinter's start position.",
+    "hitstun": "Barely flinches. More annoyed than hurt. Recovers with a hair-flip motion (ear flick).",
+    "ko": "Falls backward in slow-mo style. Lands on back, one arm draped across face dramatically."
+  },
+
+  "stageEntrance": "Materializes from shadow, eyes glow first. Flicks the razor charm on the choker with one claw.",
+  "winPose": "Turns her back to the opponent, looks over shoulder with one glowing eye. Adds a tally to the choker.",
+  "roundWinQuote": "Boring."
+}

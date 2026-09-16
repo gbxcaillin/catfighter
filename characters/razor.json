@@ -1,0 +1,128 @@
+{
+  "id": "persian",
+  "name": "RAZOR",
+  "title": "The Shredder",
+  "desc": "Ex-alley king. Scars earned, not given.",
+  "lore": "Former champion of the underground circuit, Razor clawed his way from dumpster brawls to the main stage. His matted fur hides old wounds and older grudges. Fights with raw, unrefined power — no technique, all fury.",
+
+  "personality": "Grizzled, brooding, territorial. Speaks in low growls. Respects strength, despises cowardice.",
+
+  "visualDesign": {
+    "silhouette": "Stocky bruiser. Wide shoulders, barrel chest, thick limbs. Compact and top-heavy like a pit fighter.",
+    "furBase": "Dirty platinum — grimy white with grey undertone, like a white cat that lives under bridges",
+    "furAccents": "Dark charcoal smudges across the muzzle, around the eyes (raccoon mask pattern). One ear has a visible notch/tear.",
+    "underbelly": "Dingy off-white, yellowed",
+    "scars": [
+      "Three parallel claw marks across the left cheek, healed pink",
+      "A long slash down the right forearm, visible through thin fur",
+      "Notched/torn left ear tip"
+    ],
+    "eyes": {
+      "color": "#B8FF00",
+      "shape": "Narrow, predatory slits. Permanent squint on the scarred side.",
+      "glow": true,
+      "glowColor": "Toxic green, subtle pulse on special charge"
+    },
+    "nose": "#3A3A3A",
+    "innerEar": "#8B0000",
+    "accessories": [
+      "Spiked leather collar — three chrome studs on each side, one stud missing",
+      "Wrapped left paw — dirty white bandage tape, fighter style",
+      "Small hoop earring on the right ear (surviving one)"
+    ],
+    "tail": "Thick, slightly kinked from an old break. Fur rough and bristled.",
+    "expression": "Default sneer. Upper lip curled showing one fang."
+  },
+
+  "colorPalette": {
+    "body": "#C8C0B0",
+    "dark": "#4A4440",
+    "light": "#E0D8CC",
+    "eye": "#B8FF00",
+    "nose": "#3A3A3A",
+    "inner": "#8B0000",
+    "stripe": null,
+    "collar": "#2A1A0A",
+    "collarStuds": "#C0C0C0",
+    "bandage": "#D4C8A8",
+    "scarPink": "#CC7788"
+  },
+
+  "proportions": {
+    "bodyRX": 24,
+    "bodyRY": 20,
+    "headR": 23,
+    "earH": 10,
+    "earW": 9,
+    "eyeR": 5.5,
+    "pawR": 7,
+    "tailThick": 8
+  },
+
+  "traits": {
+    "fluffy": true,
+    "mane": false,
+    "stripes": false,
+    "wrinkles": false,
+    "points": false,
+    "earTufts": false,
+    "bigEars": false,
+    "scarred": true,
+    "spikedCollar": true,
+    "wrappedPaws": true,
+    "earring": true,
+    "notchedEar": true
+  },
+
+  "stats": {
+    "hp": 120,
+    "speed": 2.8,
+    "jumpForce": -10.5,
+    "weight": 1.15
+  },
+
+  "attacks": {
+    "light": {
+      "name": "Gutter Swipe",
+      "animation": "Fast horizontal claw rake — paw drags from high to low, leaves brief claw-trail afterimage",
+      "startup": 5,
+      "active": 3,
+      "recovery": 8,
+      "damage": 10,
+      "knockback": 5,
+      "hitboxRX": 48,
+      "hitboxRY": 28
+    },
+    "heavy": {
+      "name": "Dumpster Slam",
+      "animation": "Both paws overhead, slams down with full weight. Ground cracks on hit. Slight camera shake.",
+      "startup": 9,
+      "active": 4,
+      "recovery": 14,
+      "damage": 20,
+      "knockback": 10,
+      "hitboxRX": 58,
+      "hitboxRY": 34
+    },
+    "special": {
+      "type": "furball",
+      "name": "Spit Take",
+      "animation": "Hacks up a glowing toxic green furball projectile. Travels in a low arc with a slight spin. Leaves a small splatter on impact.",
+      "damage": 18,
+      "visualEffect": "Projectile is a spiky ball with green glow trail, impact sparks are acid-green"
+    }
+  },
+
+  "animationNotes": {
+    "idle": "Heavy breathing, shoulders rise and fall. Occasional ear twitch on the good ear. Tail flicks irritably.",
+    "walk": "Lumbering, slightly bow-legged. Shoulders roll with each step. Head stays low and forward — stalking posture.",
+    "jump": "Explosive leap, back arches. Fur bristles on the way up.",
+    "crouch": "Low combat stance, weight forward on front paws. Eyes narrow further.",
+    "hitstun": "Staggers but recovers with a snarl. Bares teeth.",
+    "ko": "Falls forward onto face, tail goes limp. Smoke wisps from the collar."
+  },
+
+  "stageEntrance": "Cracks knuckles (paw joints), rolls neck with an audible pop. Spits to the side.",
+  "winPose": "Stands over opponent, flexes claws. Collar studs catch the light.",
+  "roundWinQuote": "Stay down."
+}
