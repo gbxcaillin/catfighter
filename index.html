@@ -3316,11 +3316,11 @@ function drawStageSelect() {
     const s = STAGES[i], sim = stageImage(s);
     const cx = 150 + i * 220, cy = 250, sel = i === game.stageSelect;
     ctx.save();
-    ctx.translate(cx, cy); ctx.rotate(sel ? 0 : rots[i]); ctx.scale(sel ? 1.16 : 1, sel ? 1.16 : 1);
+    ctx.translate(cx, cy); ctx.rotate(sel ? 0 : rots[i]); ctx.scale(sel ? 1.1 : 1, sel ? 1.1 : 1);
     const frameKey = sel ? 'ui_frame_pink' : 'ui_frame_grey';
     let tb = [-100, -66, 200, 112];
     if (img(frameKey)) {
-      const fim = img(frameKey), fw = 232, fh = fw * fim.height / fim.width;
+      const fim = img(frameKey), fw = 198, fh = fw * fim.height / fim.width;
       ctx.drawImage(fim, -fw / 2, -10 - fh / 2, fw, fh);
       tb = [-fw / 2 + fw * 0.07, -10 - fh / 2 + fh * 0.08, fw * 0.86, fh * 0.84];
     } else {
@@ -3336,10 +3336,10 @@ function drawStageSelect() {
     }
     if (!sel) { ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(...tb); }
     if (!img(frameKey)) { ctx.strokeStyle = sel ? s.accent : '#2A2A30'; ctx.lineWidth = 3; ctx.strokeRect(-100, -66, 200, 112); }
-    sprayText(s.name, 0, 92, s.name.length > 13 ? 17 : 22, s.accent, { seed: 20 + i, drips: false, outline: '#0A0608' });
-    scratchText(s.sub, 0, 112, 10, '#9A9A9A');
-    scratchText('LEVEL ' + (i + 1), -100, -112, 12, s.accent, { align: 'left' });
-    if (sel) drawSafetyPin(96, -110, 0.5, '#C0C0C8');
+    sprayText(s.name, 0, 84, s.name.length > 13 ? 16 : 22, s.accent, { seed: 20 + i, drips: false, outline: '#0A0608' });
+    scratchText(s.sub, 0, 104, 10, '#9A9A9A');
+    scratchText('LEVEL ' + (i + 1), -86, -100, 12, s.accent, { align: 'left' });
+    if (sel) drawSafetyPin(82, -98, 0.5, '#C0C0C8');
     ctx.restore();
   }
 
