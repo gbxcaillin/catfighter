@@ -508,7 +508,8 @@ const P2 = {
 // Touch state
 const touch = { left:false, right:false, up:false, down:false, light:false, heavy:false, special:false, any:false, confirm:false, pause:false };
 let touchActive = false;
-const touchJust = { light:false, heavy:false, special:false, confirm:false, pause:false, left:false, right:false, up:false, down:false };
+const touchJust = { light:false, heavy:false, special:false, confirm:false, pause:false, left:false, right:false, up:false, down:false, any:false };
+let tapPos = null;
 
 const TBTN = [
   { id:'left',  x:90,  y:H-85, r:32 },
@@ -530,6 +531,12 @@ function handleTouches(e) {
   for (const k in touchJust) prev[k] = touch[k];
   for (const k in touch) touch[k] = false;
   const rect = canvas.getBoundingClientRect();
+  if (e.type === 'touchstart') {
+    for (const t of e.changedTouches) {
+      const tx = (t.clientX - rect.left) / rect.width * W, ty = (t.clientY - rect.top) / rect.height * H;
+      if (!TBTN.some(btn => Math.hypot(tx - btn.x, ty - btn.y) < btn.r * 1.3)) tapPos = { x: tx, y: ty };
+    }
+  }
   for (const t of e.touches) {
     const tx = (t.clientX - rect.left) / rect.width * W;
     const ty = (t.clientY - rect.top) / rect.height * H;
@@ -557,7 +564,7 @@ function drawTouchUI() {
     if (btn.id === 'pause' && !inFight) continue;
     if (btn.id === 'confirm' && game.state === 'fighting') continue;
     const pressed = touch[btn.id];
-    if (drawImg('ui_' + TOUCH_IMG[btn.id], btn.x, btn.y, btn.r * 2.2, { alpha: pressed ? 1 : 0.7, scale: pressed ? 1.12 : 1, flip: btn.id === 'left' })) continue;
+    if (drawImg('ui_' + TOUCH_IMG[btn.id], btn.x, btn.y, btn.r * 2.2, { alpha: pressed ? 1 : 0.75, scale: pressed ? 1.12 : 1, flip: btn.id === 'left', glow: btn.id === 'heavy' ? P.p1 : null, blur: 18 })) continue;
     ctx.globalAlpha = pressed ? 0.5 : 0.2;
     ctx.fillStyle = '#fff';
     ctx.beginPath();
@@ -3385,7 +3392,7 @@ function confirm() {
 }
 
 function updateTitle() {
-  if (confirm() || touch.any) {
+  if (confirm() || touchJust.any) {
     game.state = 'modeSelect';
     game.modeSelect = 0;
     SFX.select();
@@ -3399,7 +3406,9 @@ function updateModeSelect() {
   if (wasPressed('KeyS') || wasPressed('ArrowDown') || wasPressed('KeyD') || wasPressed('ArrowRight') || touchJust.down || touchJust.right) {
     game.modeSelect = 1; SFX.move();
   }
-  if (confirm()) {
+  let tappedMode = false;
+  for (let i = 0; i < 2; i++) if (tapIn(W/2 + (i ? 205 : -205) - 150, 290 - 150, 300, 300)) { game.modeSelect = i; tappedMode = true; }
+  if (confirm() || tappedMode) {
     game.vsAI = game.modeSelect === 0;
     game.state = 'charSelect';
     game.p1Select = 0;
@@ -3446,7 +3455,12 @@ function updateCharSelect() {
     }
   }
 
-  if (confirm()) {
+  let goFight = false;
+  for (let i = 0; i < 4; i++) if (tapIn(150 + i * 220 - 90, 270 - 115, 180, 240)) {
+    if (game.p1Select === i) goFight = true;
+    else if (i !== game.p2Select || !game.vsAI) { game.p1Select = i; if (game.vsAI && game.p2Select === i) game.p2Select = (i + 1) % 4; SFX.move(); }
+  }
+  if (confirm() || goFight) {
     game.state = 'stageSelect';
     SFX.select();
   }
@@ -3460,7 +3474,9 @@ function updateStageSelect() {
     game.stageSelect = (game.stageSelect + 1) % STAGES.length; SFX.move();
   }
   if (wasPressed('Escape')) { game.state = 'charSelect'; SFX.move(); return; }
-  if (confirm()) {
+  let go = false;
+  for (let i = 0; i < STAGES.length; i++) if (tapIn(150 + i * 220 - 105, 250 - 120, 210, 260)) { if (game.stageSelect === i) go = true; else { game.stageSelect = i; SFX.move(); } }
+  if (confirm() || go) {
     game.stage = game.stageSelect;
     startMatch();
     SFX.select();
@@ -3567,13 +3583,17 @@ function updateFighting() {
   updateParticles();
 }
 
+function tapIn(x, y, w, h) { return tapPos && tapPos.x >= x && tapPos.x <= x + w && tapPos.y >= y && tapPos.y <= y + h; }
+
 function updatePaused() {
   const MENU_ITEMS = ['Resume', 'Configure Controls', 'Quit to Menu'];
-  if (wasPressed('KeyW') || wasPressed('ArrowUp') || (touchJust.light && touch.up)) {
+  let tapped = false;
+  for (let i = 0; i < MENU_ITEMS.length; i++) if (tapIn(W/2 - 200, 250 + i * 64 - 30, 400, 60)) { game.pauseMenu = i; tapped = true; }
+  if (wasPressed('KeyW') || wasPressed('ArrowUp') || touchJust.up) {
     game.pauseMenu = (game.pauseMenu + MENU_ITEMS.length - 1) % MENU_ITEMS.length;
     SFX.move();
   }
-  if (wasPressed('KeyS') || wasPressed('ArrowDown') || (touchJust.light && touch.down)) {
+  if (wasPressed('KeyS') || wasPressed('ArrowDown') || touchJust.down) {
     game.pauseMenu = (game.pauseMenu + 1) % MENU_ITEMS.length;
     SFX.move();
   }
@@ -3582,7 +3602,7 @@ function updatePaused() {
     SFX.select();
     return;
   }
-  if (confirm()) {
+  if (confirm() || tapped) {
     if (game.pauseMenu === 0) {
       game.state = 'fighting';
       SFX.select();
@@ -3913,6 +3933,7 @@ function gameLoop(timestamp) {
     tick();
     clearJustPressed();
     for (const k in touchJust) touchJust[k] = false;
+    tapPos = null;
   }
 
   render();
