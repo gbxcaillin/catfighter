@@ -1909,7 +1909,7 @@ function spriteScale(f, S) {
 function drawSpriteCat(f, S) {
   const b = f.breed, sf = f.stateFrame, gf = game.frame;
   const fr = spritePose(f, S);
-  const flash = f.flashTimer > 0 && Math.floor(sf / 3) % 2 === 0;
+  const flash = f.flashTimer > 0 && sf < 9 && Math.floor(sf / 3) % 2 === 0;
   let bob = 0, sx = 1, sy = 1, rot = 0, ox = 0;
   const atk = f.state === 'light' ? b.lAtk : f.state === 'heavy' ? b.hAtk : null;
   const active = atk && sf >= atk.su && sf < atk.su + atk.ac;
@@ -1946,7 +1946,7 @@ function drawSpriteCat(f, S) {
   if (f.state === 'special' && !flash) { ctx.shadowColor = b.specColor; ctx.shadowBlur = 24 + Math.sin(gf * 0.4) * 8; }
   ctx.drawImage(fr.img, -fx, -h, w, h);
   ctx.shadowBlur = 0;
-  if (flash) { ctx.globalAlpha = 0.7; ctx.drawImage(whiteFrame(fr), -fx, -h, w, h); ctx.globalAlpha = 1; }
+  if (flash) { ctx.globalAlpha = 0.5; ctx.drawImage(whiteFrame(fr), -fx, -h, w, h); ctx.globalAlpha = 1; }
   if (active && !flash) {
     ctx.save();
     ctx.strokeStyle = b.specColor; ctx.shadowColor = b.specColor; ctx.shadowBlur = 14;
@@ -2866,7 +2866,7 @@ function stageImageFx(st, gf) {
   }
   ctx.globalAlpha = 1;
   if (st.id === 'pit') {
-    if ((gf * 7919) % 97 < 2) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, 0, W, H); }
+    if ((gf * 7919) % 97 < 2) { ctx.fillStyle = 'rgba(0,0,0,0.10)'; ctx.fillRect(0, 0, W, H); }
     if (shakeAmt > 6 && (gf % 3) === 0) {
       const m = pitCrowd[(gf * 7) % pitCrowd.length];
       ctx.save(); ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 40;
@@ -3111,7 +3111,8 @@ function drawTitle() {
     drawStage();
     ctx.fillStyle = 'rgba(4,4,10,0.55)';
     ctx.fillRect(0, 0, W, H);
-    drawImg('ui_title_logo', W / 2, 136, 205, { glow: '#FF2E63', blur: 26 + Math.sin(t * 0.05) * 10, scale: flashOn ? 1.03 : 1 });
+    glowBlob(W / 2, 140, 300, '#FF2E63', 0.22 + Math.sin(t * 0.05) * 0.06);
+    drawImg('ui_title_logo', W / 2, 136, 205, { scale: 1 + Math.sin(t * 0.05) * 0.008 });
   } else if (ti) {
     ctx.drawImage(ti, 0, 0, W, H);
     ctx.drawImage(titlePatch(), 330, 230);
@@ -3172,7 +3173,6 @@ function drawTitle() {
     scratchText(String(hs), tx + rem * 5 + 14, H - 36, 15, '#F5C518', { align: 'left' });
   }
 
-  if (flashOn) { ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(0, 0, W, H); }
 }
 
 function drawModeSelect() {
