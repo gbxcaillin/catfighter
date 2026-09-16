@@ -44,7 +44,9 @@ const BLOCK_KB = 0.25;              // knockback multiplier when blocking
 const PARTICLE_CAP = 120;           // max particles on screen
 const AI_BASE_REACT = 14;           // AI base reaction time (frames)
 const AI_AGGRO = 0.55;              // AI aggression factor
-const ART = 1.6;                    // fighter body scale (collision + canvas cats)
+const ART = 2.18;                   // fighter body scale (collision + canvas cats)
+const MOVE_SCALE = 1.3;             // walk speed multiplier for the larger fighters
+const JUMP_SCALE = 1.2;             // jump velocity multiplier for the larger fighters
 
 // ═══════════════════════════════════════════════════════════════════
 //  Canvas & Globals
@@ -549,10 +551,13 @@ canvas.addEventListener('touchcancel', handleTouches, {passive:false});
 
 function drawTouchUI() {
   if (!touchActive) return;
-  const TOUCH_IMG = { left: 'btn_dpad_left', right: 'btn_dpad_right', up: 'btn_dpad_up', down: 'btn_dpad_down', light: 'btn_light', heavy: 'btn_heavy', special: 'btn_special', confirm: 'btn_confirm', pause: 'btn_pause' };
+  const TOUCH_IMG = { left: 'btn_dpad_right', right: 'btn_dpad_right', up: 'btn_dpad_up', down: 'btn_dpad_down', light: 'btn_light', heavy: 'btn_heavy', special: 'btn_special', confirm: 'btn_confirm', pause: 'btn_pause' };
+  const inFight = game.state === 'fighting' || game.state === 'roundIntro' || game.state === 'paused' || game.state === 'controls';
   for (const btn of TBTN) {
+    if (btn.id === 'pause' && !inFight) continue;
+    if (btn.id === 'confirm' && game.state === 'fighting') continue;
     const pressed = touch[btn.id];
-    if (drawImg('ui_' + TOUCH_IMG[btn.id], btn.x, btn.y, btn.r * 2.2, { alpha: pressed ? 1 : 0.7, scale: pressed ? 1.12 : 1 })) continue;
+    if (drawImg('ui_' + TOUCH_IMG[btn.id], btn.x, btn.y, btn.r * 2.2, { alpha: pressed ? 1 : 0.7, scale: pressed ? 1.12 : 1, flip: btn.id === 'left' })) continue;
     ctx.globalAlpha = pressed ? 0.5 : 0.2;
     ctx.fillStyle = '#fff';
     ctx.beginPath();
@@ -704,7 +709,7 @@ const BREEDS = {
     hp: 120, speed: 2.8, jumpF: -10.5, weight: 1.15,
     lAtk: { su:5, ac:3, re:8, dmg:10, kb:5, rx:48, ry:28 },
     hAtk: { su:9, ac:4, re:14, dmg:20, kb:10, rx:58, ry:34 },
-    specType: 'furball', specDmg: 18, specColor: '#B8FF00', spriteH: 160,
+    specType: 'furball', specDmg: 18, specColor: '#B8FF00', spriteH: 218,
   },
   siamese: {
     key: 'vex', name: 'VEX', title: 'The Stiletto', arch: 'SPEED',
@@ -717,7 +722,7 @@ const BREEDS = {
     hp: 90, speed: 5.5, jumpF: -12.5, weight: 0.85,
     lAtk: { su:2, ac:3, re:5, dmg:7, kb:3, rx:42, ry:26 },
     hAtk: { su:5, ac:4, re:9, dmg:14, kb:7, rx:52, ry:30 },
-    specType: 'shadowDash', specDmg: 22, specColor: '#FF0066', spriteH: 168,
+    specType: 'shadowDash', specDmg: 22, specColor: '#FF0066', spriteH: 228,
   },
   maineCoon: {
     key: 'brutus', name: 'BRUTUS', title: 'The Wrecking Ball', arch: 'TANK',
@@ -730,7 +735,7 @@ const BREEDS = {
     hp: 140, speed: 2.2, jumpF: -10, weight: 1.35,
     lAtk: { su:6, ac:4, re:10, dmg:12, kb:7, rx:55, ry:32 },
     hAtk: { su:10, ac:5, re:16, dmg:26, kb:15, rx:65, ry:38 },
-    specType: 'earthquake', specDmg: 30, specColor: '#FF6600', spriteH: 182,
+    specType: 'earthquake', specDmg: 30, specColor: '#FF6600', spriteH: 248,
   },
   sphynx: {
     key: 'hex', name: 'HEX', title: 'The Glitch', arch: 'GLASS CANNON',
@@ -743,7 +748,7 @@ const BREEDS = {
     hp: 85, speed: 6, jumpF: -13, weight: 0.75,
     lAtk: { su:2, ac:2, re:4, dmg:8, kb:3, rx:40, ry:24 },
     hAtk: { su:4, ac:3, re:7, dmg:16, kb:9, rx:50, ry:28 },
-    specType: 'hypnoGaze', specDmg: 12, specColor: '#FF00FF', spriteH: 164,
+    specType: 'hypnoGaze', specDmg: 12, specColor: '#FF00FF', spriteH: 222,
   },
 };
 
@@ -889,7 +894,7 @@ function updateFighter(f, input, opp) {
   }
 
   // movement
-  const spd = b.speed * (f.grounded ? 1 : AIR_CTRL);
+  const spd = b.speed * MOVE_SCALE * (f.grounded ? 1 : AIR_CTRL);
   let moving = false;
 
   if (input.left) { f.vx -= spd * 0.3; moving = true; }
@@ -907,7 +912,7 @@ function updateFighter(f, input, opp) {
 
     // jump
     if (input.up && f.state !== 'crouch') {
-      f.vy = b.jumpF;
+      f.vy = b.jumpF * JUMP_SCALE;
       f.grounded = false;
       f.state = 'jump'; f.stateFrame = 0;
       SFX.jump();
@@ -3138,7 +3143,7 @@ function drawTitle() {
   const lineup = [['persian', 215, 1, 'idle'], ['siamese', 395, -1, 'idle'], ['maineCoon', 575, 1, 'idle'], ['sphynx', 760, 1, 'crouch']];
   for (const [bk, x, fc, st] of lineup) {
     glowBlob(x, GROUND_Y - 40, 110, BREEDS[bk].specColor, 0.12);
-    ctx.save(); ctx.translate(x, GROUND_Y - 2); ctx.scale(0.72, 0.72);
+    ctx.save(); ctx.translate(x, GROUND_Y - 2); ctx.scale(0.66, 0.66);
     const pf = previewFighter(bk, 0, 0, fc, st); pf.stateFrame = t + x; pf.winPose = bk === 'persian';
     drawCat(pf);
     ctx.restore();
