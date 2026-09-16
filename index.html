@@ -2828,6 +2828,9 @@ function stageImageFx(st, gf) {
 
 function drawHUD() {
   const f1 = game.f1, f2 = game.f2;
+  const hg = ctx.createLinearGradient(0, 0, 0, 80);
+  hg.addColorStop(0, 'rgba(4,2,8,0.75)'); hg.addColorStop(1, 'rgba(4,2,8,0)');
+  ctx.fillStyle = hg; ctx.fillRect(0, 0, W, 80);
 
   // health bar backgrounds
   const barW = 340, barH = 22, barY = 22;
@@ -2936,6 +2939,7 @@ function titlePatch() {
     const src = img('stage_pit');
     if (src) g.drawImage(src, 330 / W * src.width, 230 / H * src.height, pw / W * src.width, ph / H * src.height, 0, 0, pw, ph);
     else { g.fillStyle = '#0A0810'; g.fillRect(0, 0, pw, ph); }
+    g.fillStyle = 'rgba(8,4,14,0.5)'; g.fillRect(0, 0, pw, ph);
     g.globalCompositeOperation = 'destination-in';
     const m = g.createRadialGradient(pw / 2, ph / 2, 95, pw / 2, ph / 2, 165);
     m.addColorStop(0, 'rgba(0,0,0,1)'); m.addColorStop(1, 'rgba(0,0,0,0)');
