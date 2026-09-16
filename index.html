@@ -44,6 +44,7 @@ const BLOCK_KB = 0.25;              // knockback multiplier when blocking
 const PARTICLE_CAP = 120;           // max particles on screen
 const AI_BASE_REACT = 14;           // AI base reaction time (frames)
 const AI_AGGRO = 0.55;              // AI aggression factor
+const ART = 1.6;                    // fighter body scale (collision + canvas cats)
 
 // ═══════════════════════════════════════════════════════════════════
 //  Canvas & Globals
@@ -578,6 +579,63 @@ function p1Input() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+//  Assets (optional image art; canvas drawing is the fallback)
+// ═══════════════════════════════════════════════════════════════════
+
+const SPRITE_MANIFEST = {};
+const ASSETS = { images: {}, sprites: {} };
+const FIGHTER_KEYS = ['razor', 'vex', 'brutus', 'hex'];
+
+function loadImage(key, src) {
+  const im = new Image();
+  im.onload = () => { ASSETS.images[key] = im; };
+  im.src = src;
+}
+function img(key) { return ASSETS.images[key] || null; }
+
+function loadSprites(key) {
+  const s = document.createElement('script');
+  s.src = `assets/fighters/${key}/manifest.js`;
+  s.onload = () => {
+    const man = SPRITE_MANIFEST[key];
+    if (!man) return;
+    const set = { frames: {}, ready: false, count: 0, total: Object.keys(man).length };
+    for (const name in man) {
+      const im = new Image();
+      im.onload = () => { set.frames[name] = { img: im, w: man[name].w, h: man[name].h, fx: man[name].fx, white: null }; set.count++; if (set.count >= set.total) set.ready = true; };
+      im.onerror = () => { set.total--; if (set.count >= set.total) set.ready = true; };
+      im.src = `assets/fighters/${key}/${name}.png`;
+    }
+    ASSETS.sprites[key] = set;
+  };
+  document.head.appendChild(s);
+}
+
+loadImage('stage_pit', 'assets/stages/pit.jpg');
+loadImage('stage_rooftop', 'assets/stages/rooftop.jpg');
+loadImage('stage_scrap', 'assets/stages/scrap.jpg');
+loadImage('stage_temple', 'assets/stages/temple.jpg');
+loadImage('ui_title', 'assets/ui/title.jpg');
+for (const k of FIGHTER_KEYS) { loadImage('portrait_' + k, `assets/portraits/${k}.jpg`); loadSprites(k); }
+
+function spriteSet(key) {
+  const s = ASSETS.sprites[key];
+  return s && s.ready && (s.frames.idle_2 || s.frames.idle_1) ? s : null;
+}
+
+function whiteFrame(fr) {
+  if (!fr.white) {
+    const c = document.createElement('canvas'); c.width = fr.w; c.height = fr.h;
+    const g = c.getContext('2d');
+    g.drawImage(fr.img, 0, 0);
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = '#fff'; g.fillRect(0, 0, fr.w, fr.h);
+    fr.white = c;
+  }
+  return fr.white;
+}
+
+// ═══════════════════════════════════════════════════════════════════
 //  Breed Definitions
 // ═══════════════════════════════════════════════════════════════════
 
@@ -595,7 +653,7 @@ const BREEDS = {
     hp: 120, speed: 2.8, jumpF: -10.5, weight: 1.15,
     lAtk: { su:5, ac:3, re:8, dmg:10, kb:5, rx:48, ry:28 },
     hAtk: { su:9, ac:4, re:14, dmg:20, kb:10, rx:58, ry:34 },
-    specType: 'furball', specDmg: 18, specColor: '#B8FF00',
+    specType: 'furball', specDmg: 18, specColor: '#B8FF00', spriteH: 160,
   },
   siamese: {
     key: 'vex', name: 'VEX', title: 'The Stiletto', arch: 'SPEED',
@@ -608,7 +666,7 @@ const BREEDS = {
     hp: 90, speed: 5.5, jumpF: -12.5, weight: 0.85,
     lAtk: { su:2, ac:3, re:5, dmg:7, kb:3, rx:42, ry:26 },
     hAtk: { su:5, ac:4, re:9, dmg:14, kb:7, rx:52, ry:30 },
-    specType: 'shadowDash', specDmg: 22, specColor: '#FF0066',
+    specType: 'shadowDash', specDmg: 22, specColor: '#FF0066', spriteH: 168,
   },
   maineCoon: {
     key: 'brutus', name: 'BRUTUS', title: 'The Wrecking Ball', arch: 'TANK',
@@ -621,7 +679,7 @@ const BREEDS = {
     hp: 140, speed: 2.2, jumpF: -10, weight: 1.35,
     lAtk: { su:6, ac:4, re:10, dmg:12, kb:7, rx:55, ry:32 },
     hAtk: { su:10, ac:5, re:16, dmg:26, kb:15, rx:65, ry:38 },
-    specType: 'earthquake', specDmg: 30, specColor: '#FF6600',
+    specType: 'earthquake', specDmg: 30, specColor: '#FF6600', spriteH: 182,
   },
   sphynx: {
     key: 'hex', name: 'HEX', title: 'The Glitch', arch: 'GLASS CANNON',
@@ -634,7 +692,7 @@ const BREEDS = {
     hp: 85, speed: 6, jumpF: -13, weight: 0.75,
     lAtk: { su:2, ac:2, re:4, dmg:8, kb:3, rx:40, ry:24 },
     hAtk: { su:4, ac:3, re:7, dmg:16, kb:9, rx:50, ry:28 },
-    specType: 'hypnoGaze', specDmg: 12, specColor: '#FF00FF',
+    specType: 'hypnoGaze', specDmg: 12, specColor: '#FF00FF', spriteH: 164,
   },
 };
 
@@ -664,14 +722,15 @@ function createFighter(breedKey, startX, facing) {
     // special move projectile/state
     specActive: false, specData: null,
     currentInput: { left:false, right:false, up:false, down:false, light:false, heavy:false, special:false },
+    winPose: false,
   };
 }
 
 function fighterHurtbox(f) {
   const b = f.breed;
   const crouchMod = f.state === 'crouch' ? 0.6 : 1;
-  const w = b.bodyRX * 2 + 8;
-  const h = (b.bodyRY * 2 + b.headR * 2 + 20) * crouchMod;
+  const w = (b.bodyRX * 2 + 8) * ART;
+  const h = (b.bodyRY * 2 + b.headR * 2 + 20) * crouchMod * ART;
   return { x: f.x - w/2, y: f.y - h, w, h };
 }
 
@@ -680,11 +739,12 @@ function fighterAtkHitbox(f) {
   if (!atk) return null;
   const su = atk.su, ac = atk.ac;
   if (f.stateFrame < su || f.stateFrame >= su + ac) return null;
-  const ox = f.facing * (f.breed.bodyRX + 5);
+  const ox = f.facing * (f.breed.bodyRX + 5) * ART;
+  const rx = atk.rx * ART, ry = atk.ry * ART;
   return {
-    x: f.x + ox + (f.facing > 0 ? 0 : -atk.rx),
-    y: f.y - f.breed.bodyRY * 2 - f.breed.headR - 5,
-    w: atk.rx, h: atk.ry,
+    x: f.x + ox + (f.facing > 0 ? 0 : -rx),
+    y: f.y - (f.breed.bodyRY * 2 + f.breed.headR + 5) * ART,
+    w: rx, h: ry,
   };
 }
 
@@ -859,9 +919,9 @@ function startSpecial(f, opp) {
   if (type === 'furball') {
     f.specActive = true;
     f.specData = { type:'furball', balls: [
-      { x: f.x + f.facing*30, y: f.y - 50, vx: f.facing*8, vy: -2 },
-      { x: f.x + f.facing*30, y: f.y - 55, vx: f.facing*7, vy: -4 },
-      { x: f.x + f.facing*30, y: f.y - 45, vx: f.facing*9, vy: 0 },
+      { x: f.x + f.facing*30*ART, y: f.y - 50*ART, vx: f.facing*8, vy: -2 },
+      { x: f.x + f.facing*30*ART, y: f.y - 55*ART, vx: f.facing*7, vy: -4 },
+      { x: f.x + f.facing*30*ART, y: f.y - 45*ART, vx: f.facing*9, vy: 0 },
     ], timer: 40 };
   } else if (type === 'shadowDash') {
     f.specActive = true;
@@ -891,7 +951,7 @@ function handleSpecial(f, opp) {
       ball.x += ball.vx;
       ball.y += ball.vy;
       ball.vy += 0.1;
-      const bRect = { x: ball.x-8, y: ball.y-8, w: 16, h: 16 };
+      const bRect = { x: ball.x-8*ART, y: ball.y-8*ART, w: 16*ART, h: 16*ART };
       if (!ball.hit && rectsHit(bRect, fighterHurtbox(opp))) {
         ball.hit = true;
         applyHit(opp, f, f.breed.specDmg * 0.4, 4, 8, ball.x, ball.y);
@@ -902,13 +962,13 @@ function handleSpecial(f, opp) {
     f.vx *= 0.95;
     if (!d.hit && rectsHit(fighterHurtbox(f), fighterHurtbox(opp))) {
       d.hit = true;
-      applyHit(opp, f, f.breed.specDmg, 8, 14, opp.x, opp.y - 40);
+      applyHit(opp, f, f.breed.specDmg, 8, 14, opp.x, opp.y - 40*ART);
     }
     if (d.timer <= 0) { f.specActive = false; f.state = 'idle'; f.stateFrame = 0; f.invincible = 0; }
   } else if (d.type === 'earthquake') {
     if (f.stateFrame === 8 && !d.hit) {
       d.hit = true;
-      if (opp.grounded && Math.abs(opp.x - f.x) < 180) {
+      if (opp.grounded && Math.abs(opp.x - f.x) < 180 * ART) {
         applyHit(opp, f, f.breed.specDmg, 12, 18, opp.x, GROUND_Y - 10);
         addShake(MAX_SHAKE);
         spawnParts(f.x, GROUND_Y, 20, '#A67B3D', 6, 20, 4);
@@ -918,12 +978,12 @@ function handleSpecial(f, opp) {
     }
     if (d.timer <= 0) { f.specActive = false; f.state = 'idle'; f.stateFrame = 0; }
   } else if (d.type === 'hypnoGaze') {
-    if (f.stateFrame === 6 && !d.hit && Math.abs(opp.x - f.x) < 140) {
+    if (f.stateFrame === 6 && !d.hit && Math.abs(opp.x - f.x) < 140 * ART) {
       d.hit = true;
       opp.hitstunTime = 40;
       opp.state = 'hitstun'; opp.stateFrame = 0;
-      applyHit(opp, f, f.breed.specDmg, 0, 0, opp.x, opp.y - 50);
-      spawnParts(opp.x, opp.y - 60, 15, '#FFD700', 3, 25, 3);
+      applyHit(opp, f, f.breed.specDmg, 0, 0, opp.x, opp.y - 50*ART);
+      spawnParts(opp.x, opp.y - 60*ART, 15, '#FF00FF', 3, 25, 3);
     }
     if (d.timer <= 0) { f.specActive = false; f.state = 'idle'; f.stateFrame = 0; }
   }
@@ -992,7 +1052,7 @@ function checkHits(f1, f2) {
 
 function pushApart(f1, f2) {
   const dist = Math.abs(f1.x - f2.x);
-  const minDist = f1.breed.bodyRX + f2.breed.bodyRX + 4;
+  const minDist = (f1.breed.bodyRX + f2.breed.bodyRX + 4) * ART;
   if (dist < minDist) {
     const push = (minDist - dist) / 2 * PUSH_APART * 0.5;
     const dir = f1.x < f2.x ? -1 : 1;
@@ -1026,7 +1086,7 @@ function aiUpdate(self, opp) {
   }
 
   // close range
-  if (dist < 90) {
+  if (dist < 90 * ART) {
     if (oppAtk && Math.random() < ai.difficulty * 0.6) {
       ai.decision = 'block';
     } else if (Math.random() < 0.15) {
@@ -1038,7 +1098,7 @@ function aiUpdate(self, opp) {
     }
   }
   // attack range
-  else if (dist < 140) {
+  else if (dist < 140 * ART) {
     if (Math.random() < AI_AGGRO * 0.8) {
       ai.decision = 'approach_attack';
     } else {
@@ -1053,7 +1113,7 @@ function aiUpdate(self, opp) {
   }
 
   // special
-  if (self.special >= SPECIAL_MAX && dist < 160 && Math.random() < 0.4) {
+  if (self.special >= SPECIAL_MAX && dist < 160 * ART && Math.random() < 0.4) {
     ai.decision = 'special';
   }
 
@@ -1067,7 +1127,7 @@ function aiToInput(self, opp) {
 
   switch (ai.decision) {
     case 'approach': inp[toOpp] = true; break;
-    case 'approach_attack': inp[toOpp] = true; if (Math.abs(self.x-opp.x)<100) inp.light = true; break;
+    case 'approach_attack': inp[toOpp] = true; if (Math.abs(self.x-opp.x)<100 * ART) inp.light = true; break;
     case 'light': inp.light = true; break;
     case 'heavy': inp.heavy = true; break;
     case 'special': inp.special = true; break;
@@ -1092,9 +1152,13 @@ function drawCat(f) {
   const gf = game.frame;
   const specFull = f.special >= SPECIAL_MAX;
 
+  const SET = spriteSet(k);
+  if (SET) { drawSpriteCat(f, SET); drawProjectiles(f); return; }
+
   ctx.save();
   ctx.translate(f.x, f.y);
   if (f.facing < 0) ctx.scale(-1, 1);
+  ctx.scale(ART, ART);
 
   let bodyOY = 0, headOY = 0, armExt = 0, armAng = 0;
   let legAnim = 0, crouchAmt = 0;
@@ -1713,12 +1777,19 @@ function drawCat(f) {
   }
 
   ctx.restore();
+  drawProjectiles(f);
+}
 
+function drawProjectiles(f) {
+  const b = f.breed, c = b.color, gf = game.frame;
+  const flash = f.flashTimer > 0 && Math.floor(f.stateFrame / 3) % 2 === 0;
+  const col = (clr) => flash ? '#ffffff' : clr;
   if (f.specActive && f.specData && f.specData.type === 'furball') {
     for (const ball of f.specData.balls) {
       if (ball.hit) continue;
       ctx.save();
       ctx.translate(ball.x, ball.y);
+      ctx.scale(ART, ART);
       ctx.rotate(gf * 0.3);
       ctx.shadowColor = b.specColor; ctx.shadowBlur = 14;
       ctx.fillStyle = b.specColor;
@@ -1731,6 +1802,100 @@ function drawCat(f) {
       ctx.restore();
     }
   }
+}
+
+function spriteSeq(S, prefix) {
+  if (!S.seq) S.seq = {};
+  if (!S.seq[prefix]) {
+    const arr = [];
+    for (let i = 1; S.frames[prefix + '_' + i]; i++) arr.push(S.frames[prefix + '_' + i]);
+    S.seq[prefix] = arr;
+  }
+  return S.seq[prefix];
+}
+
+function spriteIdle(f, S) {
+  const a = spriteSeq(S, 'idle');
+  if (f.breed.key === 'razor') return a[1] || a[0];
+  return a[((game.frame / 32) | 0) % a.length];
+}
+
+function spritePose(f, S) {
+  const sf = f.stateFrame, b = f.breed;
+  const idle = spriteIdle(f, S);
+  const at = (p, i) => { const a = spriteSeq(S, p); return a.length ? a[Math.max(0, Math.min(a.length - 1, i))] : idle; };
+  const step = (p, rate, offset) => { const a = spriteSeq(S, p); return a.length ? a[Math.min(a.length - 1, ((sf - (offset || 0)) / rate) | 0)] : idle; };
+  if (f.winPose && (f.state === 'idle' || f.state === 'walk')) return at('win', 0);
+  switch (f.state) {
+    case 'idle': return idle;
+    case 'walk': { const a = spriteSeq(S, 'walk'); return a.length ? a[((sf / 7) | 0) % a.length] : idle; }
+    case 'jump': case 'airborne': return at('jump', f.vy < 0 ? 0 : 1);
+    case 'crouch': return at('crouch', 0);
+    case 'light': return at('light', sf < b.lAtk.su ? 0 : 1);
+    case 'heavy': return at('heavy', sf < b.hAtk.su ? 0 : 1);
+    case 'special': return spriteSeq(S, 'special').length ? step('special', 8) : at('roar', 0);
+    case 'hitstun': return step('hit', 6);
+    case 'blockstun': return at('block', 0);
+    case 'ko': { const hit = spriteSeq(S, 'hit'); if (sf < 8 && hit.length) return hit[hit.length - 1]; return step('ko', 8, 8); }
+  }
+  return idle;
+}
+
+function spriteScale(f, S) {
+  if (!S.scale) { const a = spriteSeq(S, 'idle'); const ref = f.breed.key === 'razor' ? (a[1] || a[0]) : a[0]; S.scale = f.breed.spriteH / ref.h; }
+  return S.scale;
+}
+
+function drawSpriteCat(f, S) {
+  const b = f.breed, sf = f.stateFrame, gf = game.frame;
+  const fr = spritePose(f, S);
+  const flash = f.flashTimer > 0 && Math.floor(sf / 3) % 2 === 0;
+  let bob = 0, sx = 1, sy = 1, rot = 0, ox = 0;
+  const atk = f.state === 'light' ? b.lAtk : f.state === 'heavy' ? b.hAtk : null;
+  const active = atk && sf >= atk.su && sf < atk.su + atk.ac;
+  switch (f.state) {
+    case 'idle': sy = 1 + Math.sin(sf * 0.08) * 0.012; sx = 1 - Math.sin(sf * 0.08) * 0.006; break;
+    case 'walk': bob = -Math.abs(Math.sin(sf * 0.17)) * 4; rot = Math.sin(sf * 0.17) * 0.02; break;
+    case 'jump': case 'airborne': rot = 0.06; break;
+    case 'light': case 'heavy': ox = sf < atk.su ? -4 : active ? 8 : lerp(8, 0, (sf - atk.su - atk.ac) / atk.re); break;
+    case 'special': sy = 1 + Math.sin(sf * 0.3) * 0.02; break;
+    case 'hitstun': rot = -0.08 + Math.sin(sf * 0.5) * 0.03; ox = -3; break;
+    case 'blockstun': ox = -2; break;
+    case 'ko': ox = sf < 10 ? -6 : 0; break;
+  }
+  const sc = spriteScale(f, S);
+  const w = fr.w * sc, h = fr.h * sc, fx = fr.fx * sc;
+
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  if (f.facing < 0) ctx.scale(-1, 1);
+  // ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+  ctx.beginPath(); ctx.ellipse(w * 0.05, GROUND_Y - f.y + 3, w * 0.3, 7, 0, 0, 7); ctx.fill();
+  // afterimages
+  if (!flash && (f.state === 'walk' && b.key === 'vex' || (f.state === 'special' && f.specData && f.specData.type === 'shadowDash'))) {
+    for (let i = 1; i <= 3; i++) { ctx.globalAlpha = 0.18 / i; ctx.drawImage(fr.img, -fx - i * 14, -h, w, h); }
+    ctx.globalAlpha = 1;
+  }
+  if (!flash && b.key === 'hex' && (gf % 150) < 4) {
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(whiteFrame(fr), -fx - 5, -h, w, h); ctx.drawImage(whiteFrame(fr), -fx + 5, -h, w, h);
+    ctx.globalAlpha = 1;
+  }
+  ctx.translate(ox, bob); ctx.rotate(rot); ctx.scale(sx, sy);
+  if (f.state === 'special' && !flash) { ctx.shadowColor = b.specColor; ctx.shadowBlur = 24 + Math.sin(gf * 0.4) * 8; }
+  ctx.drawImage(fr.img, -fx, -h, w, h);
+  ctx.shadowBlur = 0;
+  if (flash) { ctx.globalAlpha = 0.7; ctx.drawImage(whiteFrame(fr), -fx, -h, w, h); ctx.globalAlpha = 1; }
+  if (active && !flash) {
+    ctx.save();
+    ctx.strokeStyle = b.specColor; ctx.shadowColor = b.specColor; ctx.shadowBlur = 14;
+    ctx.lineWidth = f.state === 'heavy' ? 6 : 4; ctx.lineCap = 'round'; ctx.globalAlpha = 0.75;
+    ctx.beginPath(); ctx.arc(w * 0.3, -h * 0.55, h * (f.state === 'heavy' ? 0.42 : 0.34), -1.0, 0.45); ctx.stroke();
+    ctx.restore();
+  }
+  if (f.state === 'special' && f.specActive && f.specData) { ctx.save(); ctx.scale(ART, ART); drawSpecialEffect(f); ctx.restore(); }
+  ctx.restore();
 }
 
 function drawSpecialEffect(f) {
@@ -2613,13 +2778,48 @@ function stageLayers(st) {
   return st.layers;
 }
 
+function stageImage(st) { return img('stage_' + st.id); }
+
 function drawStage() {
   const st = STAGES[game.stage];
+  const im = stageImage(st);
+  if (im) {
+    ctx.drawImage(im, 0, 0, W, H);
+    stageImageFx(st, game.frame);
+    return;
+  }
   const L = stageLayers(st);
   ctx.drawImage(L.back, 0, 0);
   st.mid(game.frame);
   ctx.drawImage(L.front, 0, 0);
   st.over(game.frame);
+}
+
+// light dynamic touches layered over a painted backdrop
+function stageImageFx(st, gf) {
+  const rng = srand(3);
+  ctx.fillStyle = '#FFF8E0';
+  for (let i = 0; i < 22; i++) {
+    const bx = rng() * W, by = 80 + rng() * 300, sp = 0.2 + rng() * 0.4;
+    ctx.globalAlpha = 0.10 + 0.10 * Math.sin(gf * 0.05 + i);
+    ctx.beginPath(); ctx.arc(bx + Math.sin(gf * 0.01 + i) * 12, by + ((gf * sp + i * 13) % 200) - 100, 1, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  if (st.id === 'pit') {
+    if ((gf * 7919) % 97 < 2) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, 0, W, H); }
+    if (shakeAmt > 6 && (gf % 3) === 0) {
+      const m = pitCrowd[(gf * 7) % pitCrowd.length];
+      ctx.save(); ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 40;
+      ctx.beginPath(); ctx.arc(m.x, 250 + (m.y - 336), 5, 0, 7); ctx.fill(); ctx.restore();
+    }
+    smokeColumn(900, 300, gf, 1, 5, 0.05);
+  } else if (st.id === 'temple') {
+    templePetals(gf, 7, 10, 0.9);
+  } else if (st.id === 'scrap') {
+    scrapOver(gf);
+  } else if (st.id === 'rooftop') {
+    roofOver(gf);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2726,6 +2926,25 @@ function previewFighter(breedKey, x, y, facing, state) {
            special: 0, flashTimer: 0, specActive: false, specData: null };
 }
 
+// covers the menu list baked into the title render with the matching crowd/fence area of the stage render
+let titlePatchLayer = null;
+function titlePatch() {
+  if (!titlePatchLayer) {
+    const pw = 300, ph = 260;
+    const c = document.createElement('canvas'); c.width = pw; c.height = ph;
+    const g = c.getContext('2d');
+    const src = img('stage_pit');
+    if (src) g.drawImage(src, 330 / W * src.width, 230 / H * src.height, pw / W * src.width, ph / H * src.height, 0, 0, pw, ph);
+    else { g.fillStyle = '#0A0810'; g.fillRect(0, 0, pw, ph); }
+    g.globalCompositeOperation = 'destination-in';
+    const m = g.createRadialGradient(pw / 2, ph / 2, 95, pw / 2, ph / 2, 165);
+    m.addColorStop(0, 'rgba(0,0,0,1)'); m.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = m; g.fillRect(0, 0, pw, ph);
+    titlePatchLayer = c;
+  }
+  return titlePatchLayer;
+}
+
 let corkLayer = null;
 function drawCorkboard() {
   if (!corkLayer) {
@@ -2758,22 +2977,27 @@ function drawCorkboard() {
 }
 
 function drawTitle() {
-  drawStage();
-  ctx.fillStyle = 'rgba(4,4,10,0.62)';
-  ctx.fillRect(0, 0, W, H);
-
   const t = game.frame;
   const flashOn = (t % 130) < 2;
+  const ti = img('ui_title');
+  if (ti) {
+    ctx.drawImage(ti, 0, 0, W, H);
+    ctx.drawImage(titlePatch(), 330, 230);
+  } else {
+    drawStage();
+    ctx.fillStyle = 'rgba(4,4,10,0.62)';
+    ctx.fillRect(0, 0, W, H);
 
-  // cat-skull watermark behind the logo
-  const pulse = 1 + Math.sin(t * 0.03) * 0.05;
-  ctx.save(); ctx.translate(W / 2, 140); ctx.scale(pulse, pulse);
-  drawCatSkull(0, 0, 72, '#FF2E63', { alpha: 0.12, hole: 'rgba(20,4,10,0.6)', bones: false });
-  ctx.restore();
-  drawCrown(W / 2 + 262, 96, 20, '#FF2E63', 3);
+    // cat-skull watermark behind the logo
+    const pulse = 1 + Math.sin(t * 0.03) * 0.05;
+    ctx.save(); ctx.translate(W / 2, 140); ctx.scale(pulse, pulse);
+    drawCatSkull(0, 0, 72, '#FF2E63', { alpha: 0.12, hole: 'rgba(20,4,10,0.6)', bones: false });
+    ctx.restore();
+    drawCrown(W / 2 + 262, 96, 20, '#FF2E63', 3);
 
-  sprayText('CATFIGHTER', W / 2, 176, 98, flashOn ? '#FFFFFF' : '#FF2E63', { glow: 18 + Math.sin(t * 0.05) * 8, glowColor: '#FF2E63', seed: 3, outline: '#14060C' });
-  scratchText('UNDERGROUND', W / 2, 224, 30, '#D0D0D0', { underline: true });
+    sprayText('CATFIGHTER', W / 2, 176, 98, flashOn ? '#FFFFFF' : '#FF2E63', { glow: 18 + Math.sin(t * 0.05) * 8, glowColor: '#FF2E63', seed: 3, outline: '#14060C' });
+    scratchText('UNDERGROUND', W / 2, 224, 30, '#D0D0D0', { underline: true });
+  }
 
   // sparks dropping from the right work light
   ctx.fillStyle = '#FFB040';
@@ -2784,20 +3008,20 @@ function drawTitle() {
   ctx.globalAlpha = 1;
 
   // fighter lineup
-  const lineup = [['persian', 205, 1, 'idle'], ['siamese', 395, -1, 'idle'], ['maineCoon', 585, 1, 'idle'], ['sphynx', 775, 1, 'crouch']];
+  const lineup = [['persian', 215, 1, 'idle'], ['siamese', 395, -1, 'idle'], ['maineCoon', 575, 1, 'idle'], ['sphynx', 760, 1, 'crouch']];
   for (const [bk, x, fc, st] of lineup) {
-    glowBlob(x, GROUND_Y - 30, 90, BREEDS[bk].specColor, 0.12);
-    ctx.save(); ctx.translate(x, GROUND_Y - 4); ctx.scale(0.95, 0.95);
-    const pf = previewFighter(bk, 0, 0, fc, st); pf.stateFrame = t + x;
+    glowBlob(x, GROUND_Y - 40, 110, BREEDS[bk].specColor, 0.12);
+    ctx.save(); ctx.translate(x, GROUND_Y - 2); ctx.scale(0.72, 0.72);
+    const pf = previewFighter(bk, 0, 0, fc, st); pf.stateFrame = t + x; pf.winPose = bk === 'persian';
     drawCat(pf);
     ctx.restore();
-    scratchText(BREEDS[bk].name, x, GROUND_Y + 24, 16, '#C0C0C0', { rotate: -0.05 });
+    scratchText(BREEDS[bk].name, x, GROUND_Y + 22, 16, '#E0E0E0', { rotate: -0.05 });
   }
 
   if (Math.floor(t / 30) % 2 === 0) {
-    sprayText('STEP INTO THE PIT', W / 2, H - 66, 34, '#F4F4F4', { jitter: 2.5, seed: 8, outline: '#14060C' });
+    sprayText(ti ? 'PRESS ENTER' : 'STEP INTO THE PIT', W / 2, H - 62, ti ? 26 : 34, '#F4F4F4', { jitter: 2.5, seed: 8, outline: '#14060C' });
   }
-  scratchText('or tap screen to enter.', W / 2, H - 38, 14, '#8A8A8A', { weight: 'normal' });
+  scratchText('or tap screen to enter.', W / 2, H - 36, 14, '#A0A0A0', { weight: 'normal' });
 
   const hs = loadHighScore();
   if (hs > 0) {
@@ -2818,8 +3042,9 @@ function drawTitle() {
 }
 
 function drawModeSelect() {
-  drawStage();
-  ctx.fillStyle = 'rgba(4,4,10,0.62)'; ctx.fillRect(0, 0, W, H);
+  const ti = img('ui_title');
+  if (ti) ctx.drawImage(ti, 0, 0, W, H); else drawStage();
+  ctx.fillStyle = 'rgba(4,4,10,0.68)'; ctx.fillRect(0, 0, W, H);
   drawChainLink(0, 0, W, H, 26, '#7A7A84', 0.3);
   ctx.strokeStyle = '#3A3A42'; ctx.lineWidth = 7;
   for (const px of [120, W - 120]) { ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke(); }
@@ -2892,11 +3117,17 @@ function drawCharSelect() {
     ctx.fillStyle = '#100E16'; ctx.fillRect(-66, -86, 132, 128);
     ctx.save();
     ctx.beginPath(); ctx.rect(-66, -86, 132, 128); ctx.clip();
-    glowBlob(0, -20, 70, b.specColor, 0.4);
-    drawChainLink(-66, -86, 132, 128, 12, '#3A3A44', 0.3);
-    ctx.translate(-2, 38); ctx.scale(1.05, 1.05);
-    const pf = previewFighter(bk, 0, 0, 1, 'idle'); pf.stateFrame = game.frame + i * 37;
-    drawCat(pf);
+    const pim = img('portrait_' + b.key);
+    if (pim) {
+      const ch = pim.height * 0.64, cw = ch * (132 / 128);
+      ctx.drawImage(pim, (pim.width - cw) / 2, 0, cw, ch, -66, -86, 132, 128);
+    } else {
+      glowBlob(0, -20, 70, b.specColor, 0.4);
+      drawChainLink(-66, -86, 132, 128, 12, '#3A3A44', 0.3);
+      ctx.translate(-2, 38); ctx.scale(0.66, 0.66);
+      const pf = previewFighter(bk, 0, 0, 1, 'idle'); pf.stateFrame = game.frame + i * 37;
+      drawCat(pf);
+    }
     ctx.restore();
     ctx.fillStyle = 'rgba(235,225,180,0.55)';
     ctx.save(); ctx.translate(-62, -95); ctx.rotate(-0.65); ctx.fillRect(-18, -6, 36, 12); ctx.restore();
@@ -2938,14 +3169,19 @@ function drawStageSelect() {
   const rots = [-0.03, 0.02, -0.025, 0.03];
   const order = [0, 1, 2, 3].sort((a, b) => (a === game.stageSelect) - (b === game.stageSelect));
   for (const i of order) {
-    const s = STAGES[i], L = stageLayers(s);
+    const s = STAGES[i], sim = stageImage(s);
     const cx = 130 + i * 233, cy = 246, sel = i === game.stageSelect;
     ctx.save();
     ctx.translate(cx, cy); ctx.rotate(sel ? 0 : rots[i]); ctx.scale(sel ? 1.16 : 1, sel ? 1.16 : 1);
     ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(-98, -62, 208, 192);
     ctx.fillStyle = sel ? '#1C161C' : '#141216'; ctx.fillRect(-104, -70, 208, 192);
-    ctx.drawImage(L.back, -100, -66, 200, 112);
-    ctx.drawImage(L.front, -100, -66, 200, 112);
+    if (sim) {
+      ctx.drawImage(sim, -100, -66, 200, 112);
+    } else {
+      const L = stageLayers(s);
+      ctx.drawImage(L.back, -100, -66, 200, 112);
+      ctx.drawImage(L.front, -100, -66, 200, 112);
+    }
     if (!sel) { ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(-100, -66, 200, 112); }
     ctx.strokeStyle = sel ? s.accent : '#2A2A30'; ctx.lineWidth = 3; ctx.strokeRect(-100, -66, 200, 112);
     sprayText(s.name, 0, 76, s.name.length > 13 ? 17 : 22, s.accent, { seed: 20 + i, drips: false, outline: '#0A0608' });
@@ -3097,7 +3333,7 @@ function startRound() {
   game.f1.grounded = true; game.f1.hitThisAtk = false;
   game.f1.hitstunTime = 0; game.f1.blockstunTime = 0;
   game.f1.invincible = 0; game.f1.flashTimer = 0;
-  game.f1.specActive = false; game.f1.specData = null;
+  game.f1.specActive = false; game.f1.specData = null; game.f1.winPose = false;
   game.f1.facing = 1;
 
   game.f2.x = W - 250; game.f2.y = GROUND_Y;
@@ -3107,7 +3343,7 @@ function startRound() {
   game.f2.grounded = true; game.f2.hitThisAtk = false;
   game.f2.hitstunTime = 0; game.f2.blockstunTime = 0;
   game.f2.invincible = 0; game.f2.flashTimer = 0;
-  game.f2.specActive = false; game.f2.specData = null;
+  game.f2.specActive = false; game.f2.specData = null; game.f2.winPose = false;
   game.f2.facing = -1;
 
   particles.length = 0;
@@ -3265,8 +3501,9 @@ function updateControls() {
 function endRound(winner) {
   game.state = 'roundEnd';
   game.introTimer = 120;
-  if (winner === 1) { game.f1.wins++; game.introText = `${game.f1.breed.name} WINS!`; }
-  else { game.f2.wins++; game.introText = `${game.f2.breed.name} WINS!`; }
+  game.f1.flashTimer = 0; game.f2.flashTimer = 0;
+  if (winner === 1) { game.f1.wins++; game.f1.winPose = true; game.introText = `${game.f1.breed.name} WINS!`; }
+  else { game.f2.wins++; game.f2.winPose = true; game.introText = `${game.f2.breed.name} WINS!`; }
 }
 
 function updateRoundEnd() {
