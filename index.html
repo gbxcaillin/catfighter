@@ -388,6 +388,7 @@ function spawnHitSparks(x, y, dir) {
 }
 
 function updateParticles() {
+  updateHitFx();
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.x += p.vx; p.y += p.vy;
@@ -516,7 +517,7 @@ const TBTN = [
   { id:'heavy', x:W-105, y:H-65, r:36, label:'H' },
   { id:'special',x:W-145,y:H-130,r:30, label:'S' },
   { id:'confirm',x:W/2,  y:H-65, r:28, label:'OK' },
-  { id:'pause',  x:W/2,  y:28,   r:20, label:'II' },
+  { id:'pause',  x:W/2+98, y:30,  r:18, label:'II' },
 ];
 
 function handleTouches(e) {
@@ -548,8 +549,10 @@ canvas.addEventListener('touchcancel', handleTouches, {passive:false});
 
 function drawTouchUI() {
   if (!touchActive) return;
+  const TOUCH_IMG = { left: 'btn_dpad_left', right: 'btn_dpad_right', up: 'btn_dpad_up', down: 'btn_dpad_down', light: 'btn_light', heavy: 'btn_heavy', special: 'btn_special', confirm: 'btn_confirm', pause: 'btn_pause' };
   for (const btn of TBTN) {
     const pressed = touch[btn.id];
+    if (drawImg('ui_' + TOUCH_IMG[btn.id], btn.x, btn.y, btn.r * 2.2, { alpha: pressed ? 1 : 0.7, scale: pressed ? 1.12 : 1 })) continue;
     ctx.globalAlpha = pressed ? 0.5 : 0.2;
     ctx.fillStyle = '#fff';
     ctx.beginPath();
@@ -616,7 +619,55 @@ loadImage('stage_rooftop', 'assets/stages/rooftop.jpg');
 loadImage('stage_scrap', 'assets/stages/scrap.jpg');
 loadImage('stage_temple', 'assets/stages/temple.jpg');
 loadImage('ui_title', 'assets/ui/title.jpg');
-for (const k of FIGHTER_KEYS) { loadImage('portrait_' + k, `assets/portraits/${k}.jpg`); loadSprites(k); }
+for (const k of FIGHTER_KEYS) { loadImage('portrait_' + k, `assets/portraits/${k}.jpg`); loadImage('head_' + k, `assets/portraits/${k}_head.png`); loadSprites(k); }
+const UI_KEYS = ['title_logo','menu_resume','menu_controls','menu_quit','menu_resume_sel','menu_controls_sel','menu_quit_sel',
+  'btn_ok_p1','btn_ok_p2','btn_pause','btn_pause_alt','btn_confirm','btn_confirm_alt',
+  'digit_0','digit_1','digit_2','digit_3','digit_4','digit_5','digit_6','digit_7','digit_8','digit_9',
+  'tab_p1','tab_p2','press_a_key','hud_healthbar_p1','hud_healthbar_p2','hud_timer','hud_meter_p1','hud_meter_p2',
+  'pip_p1','pip_p2','pip_off','hud_special_ready','crown_p1','crown_p2','crown','skull','skull_p1','skull_p2','x_p1','x_p2','x',
+  'btn_dpad_up','btn_dpad_down','btn_dpad_left','btn_dpad_right','btn_light','btn_heavy','btn_special',
+  'paused','mode_1p','mode_2p','mode_1p_sel','mode_2p_sel','polaroid','polaroid_p1','polaroid_p2','frame_chain','frame_pink','frame_grey','frame_cyan',
+  'header_fighter','header_ground','header_battle','header_controls'];
+for (const k of UI_KEYS) loadImage('ui_' + k, `assets/ui/${k}.png`);
+for (const k of ['round_1','round_2','round_3','fight','ko','time_up','wins','perfect','press_enter']) loadImage('ban_' + k, `assets/banners/${k}.png`);
+for (const k of ['hit_1','hit_2','hit_3','hit_4','hit_5','hit_6']) loadImage('fx_' + k, `assets/fx/${k}.png`);
+// fill-channel rectangles inside the bar art, as fractions of the image
+const HUD_FILL = { p1: [0.27, 0.95, 0.31, 0.62], p2: [0.088, 0.868, 0.29, 0.63], m1: [0.10, 0.906, 0.22, 0.78], m2: [0.133, 0.80, 0.22, 0.78] };
+
+// draw an image centred at (cx,cy) with a target height, keeping aspect
+function drawImg(key, cx, cy, h, o = {}) {
+  const im = img(key);
+  if (!im) return false;
+  const s = h / im.height, w = im.width * s;
+  ctx.save();
+  if (o.alpha != null) ctx.globalAlpha = o.alpha;
+  if (o.add) ctx.globalCompositeOperation = 'lighter';
+  if (o.glow) { ctx.shadowColor = o.glow; ctx.shadowBlur = o.blur || 18; }
+  ctx.translate(cx + (o.dx || 0), cy + (o.dy || 0));
+  if (o.rot) ctx.rotate(o.rot);
+  if (o.scale) ctx.scale(o.scale, o.scale);
+  if (o.flip) ctx.scale(-1, 1);
+  ctx.drawImage(im, -w / 2, -h / 2, w, h);
+  ctx.restore();
+  return true;
+}
+
+// sprite hit effects
+const hitFx = [];
+function spawnHitFx(key, x, y, size, life) {
+  if (!img(key)) return;
+  hitFx.push({ key, x, y, size, life, t: 0, rot: Math.random() * 6.28 });
+}
+function updateHitFx() {
+  for (let i = hitFx.length - 1; i >= 0; i--) { hitFx[i].t++; if (hitFx[i].t >= hitFx[i].life) hitFx.splice(i, 1); }
+}
+function drawHitFx() {
+  for (const f of hitFx) {
+    const k = f.t / f.life;
+    drawImg(f.key, f.x, f.y, f.size * (0.55 + k * 0.9), { alpha: 1 - k * k, add: true, rot: f.rot + k * 0.3 });
+  }
+}
+
 
 function spriteSet(key) {
   const s = ASSETS.sprites[key];
@@ -1003,6 +1054,7 @@ function applyHit(target, attacker, dmg, kb, stunFrames, sparkX, sparkY) {
     target.state = 'blockstun'; target.stateFrame = 0;
     target.blockstunTime = Math.ceil(stunFrames * 0.5);
     spawnParts(sparkX, sparkY, 6, P.blockSpark, 5, 10, 3);
+    spawnHitFx('fx_hit_4', sparkX, sparkY, 60, 12);
     SFX.block();
     game.hitPause = 3;
   } else {
@@ -1015,6 +1067,7 @@ function applyHit(target, attacker, dmg, kb, stunFrames, sparkX, sparkY) {
     target.comboCount++;
     target.lastHitDir = dir;
     spawnHitSparks(sparkX, sparkY, dir);
+    spawnHitFx(dmg > 15 ? 'fx_hit_1' : 'fx_hit_3', sparkX, sparkY, dmg > 15 ? 120 : 76, 14);
     addShake(dmg > 15 ? 10 : 5);
     if (dmg > 15) { SFX.hitHeavy(); game.hitPause = HEAVY_PAUSE; }
     else { SFX.hitLight(); game.hitPause = HIT_PAUSE; }
@@ -1032,6 +1085,8 @@ function applyHit(target, attacker, dmg, kb, stunFrames, sparkX, sparkY) {
     addShake(MAX_SHAKE);
     SFX.ko();
     spawnParts(sparkX, sparkY, 25, P.ko, 8, 25, 5);
+    spawnHitFx('fx_hit_5', sparkX, sparkY, 200, 26);
+    spawnHitFx('fx_hit_6', sparkX, sparkY, 140, 20);
     spawnParts(sparkX, sparkY, 15, P.gold, 6, 30, 4);
   }
 }
@@ -2826,11 +2881,74 @@ function stageImageFx(st, gf) {
 //  HUD
 // ═══════════════════════════════════════════════════════════════════
 
+function drawBarArt(key, x, y, w, h, box, frac, lostFrac, anchorRight) {
+  ctx.drawImage(img(key), x, y, w, h);
+  const [fx0, fx1, fy0, fy1] = box;
+  const bx = x + fx0 * w, bw = (fx1 - fx0) * w, by = y + fy0 * h, bh = (fy1 - fy0) * h;
+  const top = Math.max(frac, lostFrac);
+  if (lostFrac > frac) {
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    if (anchorRight) ctx.fillRect(bx + bw * (1 - lostFrac), by, bw * (lostFrac - frac), bh);
+    else ctx.fillRect(bx + bw * frac, by, bw * (lostFrac - frac), bh);
+  }
+  ctx.fillStyle = 'rgba(12,6,14,0.94)';
+  if (anchorRight) ctx.fillRect(bx, by, bw * (1 - top), bh);
+  else ctx.fillRect(bx + bw * top, by, bw * (1 - top), bh);
+}
+
+function drawDigits(n, cx, cy, h, gap) {
+  const s = String(n);
+  const ws = [...s].map(ch => { const im = img('ui_digit_' + ch); return im ? im.width * h / im.height : h * 0.6; });
+  const total = ws.reduce((a, b) => a + b, 0) + gap * (s.length - 1);
+  let x = cx - total / 2;
+  for (let i = 0; i < s.length; i++) { drawImg('ui_digit_' + s[i], x + ws[i] / 2, cy, h); x += ws[i] + gap; }
+}
+
+function drawHUDArt() {
+  const f1 = game.f1, f2 = game.f2;
+  const b1 = img('ui_hud_healthbar_p1'), b2 = img('ui_hud_healthbar_p2');
+  const w1 = 372, h1 = w1 * b1.height / b1.width;
+  const w2 = 372 * b2.width / b1.width, h2 = w2 * b2.height / b2.width;
+  const y = 6;
+  drawBarArt('ui_hud_healthbar_p1', 14, y, w1, h1, HUD_FILL.p1, Math.max(0, f1.hp / f1.maxHp), Math.max(0, f1.displayHp / f1.maxHp), false);
+  drawBarArt('ui_hud_healthbar_p2', W - 14 - w2, y, w2, h2, HUD_FILL.p2, Math.max(0, f2.hp / f2.maxHp), Math.max(0, f2.displayHp / f2.maxHp), true);
+
+  ctx.font = `15px ${F_SPRAY}`; ctx.fillStyle = '#F0F0F0';
+  ctx.textAlign = 'left'; ctx.fillText(f1.breed.name, 14 + w1 * 0.31, y + h1 * 0.88);
+  ctx.textAlign = 'right'; ctx.fillText(f2.breed.name, W - 14 - w2 * 0.21, y + h2 * 0.88);
+  ctx.font = `bold 11px ${F_MONO}`; ctx.fillStyle = '#FFFFFF';
+  ctx.textAlign = 'left'; ctx.fillText(`${Math.ceil(f1.hp)}`, 14 + w1 * 0.285, y + h1 * 0.50);
+  ctx.textAlign = 'right'; ctx.fillText(`${Math.ceil(f2.hp)}`, W - 14 - w2 * 0.145, y + h2 * 0.50);
+
+  const mw = 200, mh1 = mw * img('ui_hud_meter_p1').height / img('ui_hud_meter_p1').width;
+  const mw2 = 200 * img('ui_hud_meter_p2').width / img('ui_hud_meter_p1').width, mh2 = mw2 * img('ui_hud_meter_p2').height / img('ui_hud_meter_p2').width;
+  const my = y + h1 - 6;
+  const m1x = 14 + w1 * 0.27, m2x = W - 14 - w2 * 0.13 - mw2;
+  drawBarArt('ui_hud_meter_p1', m1x, my, mw, mh1, HUD_FILL.m1, f1.special / SPECIAL_MAX, f1.special / SPECIAL_MAX, false);
+  drawBarArt('ui_hud_meter_p2', m2x, my, mw2, mh2, HUD_FILL.m2, f2.special / SPECIAL_MAX, f2.special / SPECIAL_MAX, true);
+  const blink = Math.floor(game.frame / 12) % 2 === 0;
+  if (f1.special >= SPECIAL_MAX && blink) drawImg('ui_hud_special_ready', m1x + mw / 2, my + mh1 + 12, 24, { glow: P.p1, blur: 12 });
+  if (f2.special >= SPECIAL_MAX && blink) drawImg('ui_hud_special_ready', m2x + mw2 / 2, my + mh2 + 12, 24, { glow: P.p2, blur: 12 });
+
+  for (let i = 0; i < WINS_NEEDED; i++) {
+    drawImg(i < f1.wins ? 'ui_pip_p1' : 'ui_pip_off', m1x + mw + 18 + i * 24, my + mh1 / 2, 20);
+    drawImg(i < f2.wins ? 'ui_pip_p2' : 'ui_pip_off', m2x - 18 - i * 24, my + mh2 / 2, 20);
+  }
+
+  drawImg('ui_hud_timer', W / 2, 42, 72);
+  const tm = Math.ceil(game.roundTimer);
+  ctx.save();
+  if (tm <= 10) { ctx.shadowColor = P.ko; ctx.shadowBlur = 14; }
+  drawDigits(String(tm).padStart(2, '0'), W / 2, 44, 30, 3);
+  ctx.restore();
+}
+
 function drawHUD() {
   const f1 = game.f1, f2 = game.f2;
   const hg = ctx.createLinearGradient(0, 0, 0, 80);
   hg.addColorStop(0, 'rgba(4,2,8,0.75)'); hg.addColorStop(1, 'rgba(4,2,8,0)');
   ctx.fillStyle = hg; ctx.fillRect(0, 0, W, 80);
+  if (img('ui_hud_healthbar_p1') && img('ui_hud_healthbar_p2')) { drawHUDArt(); return; }
 
   // health bar backgrounds
   const barW = 340, barH = 22, barY = 22;
@@ -2984,7 +3102,12 @@ function drawTitle() {
   const t = game.frame;
   const flashOn = (t % 130) < 2;
   const ti = img('ui_title');
-  if (ti) {
+  if (img('ui_title_logo')) {
+    drawStage();
+    ctx.fillStyle = 'rgba(4,4,10,0.55)';
+    ctx.fillRect(0, 0, W, H);
+    drawImg('ui_title_logo', W / 2, 136, 205, { glow: '#FF2E63', blur: 26 + Math.sin(t * 0.05) * 10, scale: flashOn ? 1.03 : 1 });
+  } else if (ti) {
     ctx.drawImage(ti, 0, 0, W, H);
     ctx.drawImage(titlePatch(), 330, 230);
   } else {
@@ -3023,9 +3146,11 @@ function drawTitle() {
   }
 
   if (Math.floor(t / 30) % 2 === 0) {
-    sprayText(ti ? 'PRESS ENTER' : 'STEP INTO THE PIT', W / 2, H - 62, ti ? 26 : 34, '#F4F4F4', { jitter: 2.5, seed: 8, outline: '#14060C' });
+    if (!drawImg('ban_press_enter', W / 2, H - 50, 52, { glow: P.p1, blur: 14, dx: (Math.random() - 0.5) * 3, dy: (Math.random() - 0.5) * 2 })) {
+      sprayText(ti ? 'PRESS ENTER' : 'STEP INTO THE PIT', W / 2, H - 62, ti ? 26 : 34, '#F4F4F4', { jitter: 2.5, seed: 8, outline: '#14060C' });
+      scratchText('or tap screen to enter.', W / 2, H - 36, 14, '#A0A0A0', { weight: 'normal' });
+    }
   }
-  scratchText('or tap screen to enter.', W / 2, H - 36, 14, '#A0A0A0', { weight: 'normal' });
 
   const hs = loadHighScore();
   if (hs > 0) {
@@ -3046,15 +3171,14 @@ function drawTitle() {
 }
 
 function drawModeSelect() {
-  const ti = img('ui_title');
-  if (ti) ctx.drawImage(ti, 0, 0, W, H); else drawStage();
+  drawStage();
   ctx.fillStyle = 'rgba(4,4,10,0.68)'; ctx.fillRect(0, 0, W, H);
   drawChainLink(0, 0, W, H, 26, '#7A7A84', 0.3);
   ctx.strokeStyle = '#3A3A42'; ctx.lineWidth = 7;
   for (const px of [120, W - 120]) { ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke(); }
   ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, 30); ctx.lineTo(W, 30); ctx.stroke();
 
-  sprayText('CHOOSE YOUR BATTLE', W / 2, 96, 50, P.p1, { seed: 4, outline: '#14060C' });
+  if (!drawImg('ui_header_battle', W / 2, 78, 76, { glow: P.p2, blur: 16 })) sprayText('CHOOSE YOUR BATTLE', W / 2, 96, 50, P.p1, { seed: 4, outline: '#14060C' });
 
   const signs = [
     { big: ['1P', 'CPU'], mid: 'vs', sub: 'SHARPEN YOUR CLAWS' },
@@ -3063,6 +3187,11 @@ function drawModeSelect() {
   for (let i = 0; i < 2; i++) {
     const cx = W / 2 + (i ? 205 : -205), cy = 290, rot = i ? 0.035 : -0.03;
     const sel = game.modeSelect === i;
+    if (img('ui_mode_1p')) {
+      const key = 'ui_mode_' + (i ? '2p' : '1p') + (sel ? '_sel' : '');
+      drawImg(key, cx, cy, sel ? 290 : 250, { alpha: sel ? 1 : 0.75, glow: sel ? (i ? P.p2 : P.p1) : null, blur: 22, rot: sel ? 0 : rot });
+      continue;
+    }
     ctx.save();
     if (!sel) ctx.globalAlpha = 0.72;
     drawTornPaper(cx, cy, 290, 232, rot, P.paper, 60 + i);
@@ -3102,7 +3231,7 @@ function drawModeSelect() {
 
 function drawCharSelect() {
   drawCorkboard();
-  sprayText('CHOOSE YOUR FIGHTER', W / 2, 64, 44, P.p1, { seed: 6, outline: '#1A0A10' });
+  if (!drawImg('ui_header_fighter', W / 2, 52, 68, { glow: P.p1, blur: 16 })) sprayText('CHOOSE YOUR FIGHTER', W / 2, 64, 44, P.p1, { seed: 6, outline: '#1A0A10' });
 
   const order = [0, 1, 2, 3].sort((a, b) => {
     const sa = a === game.p1Select || a === game.p2Select, sb = b === game.p1Select || b === game.p2Select;
@@ -3116,15 +3245,24 @@ function drawCharSelect() {
     const sc = sel ? 1.12 : 1, oy = sel ? -14 : 0;
     ctx.save();
     ctx.translate(cx, cy + oy); ctx.rotate(sel ? rots[i] * 0.4 : rots[i]); ctx.scale(sc, sc);
-    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(-69, -88, 150, 190);
-    ctx.fillStyle = '#F2EEE4'; ctx.fillRect(-75, -95, 150, 190);
-    ctx.fillStyle = '#100E16'; ctx.fillRect(-66, -86, 132, 128);
+    const frameKey = sel1 ? 'ui_polaroid_p1' : sel2 ? 'ui_polaroid_p2' : 'ui_polaroid';
+    const hasFrame = !!img(frameKey);
+    let hole = [-66, -86, 132, 128];
+    if (hasFrame) {
+      const fim = img(frameKey), fh = 200, fw = fh * fim.width / fim.height;
+      ctx.drawImage(fim, -fw / 2, -100, fw, fh);
+      hole = [-fw / 2 + fw * 0.09, -100 + fh * 0.10, fw * 0.82, fh * 0.64];
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(-69, -88, 150, 190);
+      ctx.fillStyle = '#F2EEE4'; ctx.fillRect(-75, -95, 150, 190);
+      ctx.fillStyle = '#100E16'; ctx.fillRect(-66, -86, 132, 128);
+    }
     ctx.save();
-    ctx.beginPath(); ctx.rect(-66, -86, 132, 128); ctx.clip();
+    ctx.beginPath(); ctx.rect(...hole); ctx.clip();
     const pim = img('portrait_' + b.key);
     if (pim) {
-      const ch = pim.height * 0.64, cw = ch * (132 / 128);
-      ctx.drawImage(pim, (pim.width - cw) / 2, 0, cw, ch, -66, -86, 132, 128);
+      const ch = pim.height * 0.64, cw = ch * (hole[2] / hole[3]);
+      ctx.drawImage(pim, (pim.width - cw) / 2, 0, cw, ch, hole[0], hole[1], hole[2], hole[3]);
     } else {
       glowBlob(0, -20, 70, b.specColor, 0.4);
       drawChainLink(-66, -86, 132, 128, 12, '#3A3A44', 0.3);
@@ -3133,16 +3271,18 @@ function drawCharSelect() {
       drawCat(pf);
     }
     ctx.restore();
-    ctx.fillStyle = 'rgba(235,225,180,0.55)';
-    ctx.save(); ctx.translate(-62, -95); ctx.rotate(-0.65); ctx.fillRect(-18, -6, 36, 12); ctx.restore();
-    ctx.save(); ctx.translate(62, -95); ctx.rotate(0.65); ctx.fillRect(-18, -6, 36, 12); ctx.restore();
-    scratchText(b.name, 0, 68, 24, '#1A1612', { skew: -0.12 });
-    scratchText(b.arch, 0, 86, 11, '#6A6058', { skew: 0 });
-    if (!sel) { ctx.fillStyle = 'rgba(30,20,10,0.4)'; ctx.fillRect(-75, -95, 150, 190); }
+    if (!hasFrame) {
+      ctx.fillStyle = 'rgba(235,225,180,0.55)';
+      ctx.save(); ctx.translate(-62, -95); ctx.rotate(-0.65); ctx.fillRect(-18, -6, 36, 12); ctx.restore();
+      ctx.save(); ctx.translate(62, -95); ctx.rotate(0.65); ctx.fillRect(-18, -6, 36, 12); ctx.restore();
+    }
+    scratchText(b.name, 0, hasFrame ? 76 : 68, 24, '#1A1612', { skew: -0.12 });
+    scratchText(b.arch, 0, hasFrame ? 93 : 86, 11, hasFrame ? '#3A3230' : '#6A6058', { skew: 0 });
+    if (!sel) { ctx.fillStyle = 'rgba(30,20,10,0.4)'; ctx.fillRect(-75, -100, 150, 200); }
     ctx.restore();
-    drawPushpin(cx, cy + oy - 95 * sc + 6, sel1 ? P.p1 : sel2 ? P.p2 : '#8A8A8A');
-    if (sel1) sprayText('P1', cx - 58 * sc, cy + oy - 66 * sc, 24, P.p1, { seed: 1, drips: false, outline: '#1A0A10' });
-    if (sel2) sprayText(game.vsAI ? 'CPU' : 'P2', cx + 56 * sc, cy + oy - 66 * sc, 22, P.p2, { seed: 2, drips: false, outline: '#0A1A1A' });
+    if (!hasFrame) drawPushpin(cx, cy + oy - 95 * sc + 6, sel1 ? P.p1 : sel2 ? P.p2 : '#8A8A8A');
+    if (sel1) sprayText('P1', cx - 50 * sc, cy + oy - 112 * sc, 24, P.p1, { seed: 1, drips: false, outline: '#1A0A10' });
+    if (sel2) sprayText(game.vsAI ? 'CPU' : 'P2', cx + 48 * sc, cy + oy - 112 * sc, 22, P.p2, { seed: 2, drips: false, outline: '#0A1A1A' });
   }
 
   // scouting notes: stat bars for each pick
@@ -3168,30 +3308,38 @@ function drawStageSelect() {
   drawChainLink(0, 0, W, H, 26, '#5A5A62', 0.22);
   const st = STAGES[game.stageSelect];
   glowBlob(W / 2, 260, 420, st.accent, 0.08);
-  sprayText('PICK YOUR GROUND', W / 2, 66, 46, P.gold, { seed: 12, outline: '#1A1004' });
+  if (!drawImg('ui_header_ground', W / 2, 52, 68, { glow: P.p1, blur: 16 })) sprayText('PICK YOUR GROUND', W / 2, 66, 46, P.gold, { seed: 12, outline: '#1A1004' });
 
   const rots = [-0.03, 0.02, -0.025, 0.03];
   const order = [0, 1, 2, 3].sort((a, b) => (a === game.stageSelect) - (b === game.stageSelect));
   for (const i of order) {
     const s = STAGES[i], sim = stageImage(s);
-    const cx = 130 + i * 233, cy = 246, sel = i === game.stageSelect;
+    const cx = 150 + i * 220, cy = 250, sel = i === game.stageSelect;
     ctx.save();
     ctx.translate(cx, cy); ctx.rotate(sel ? 0 : rots[i]); ctx.scale(sel ? 1.16 : 1, sel ? 1.16 : 1);
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(-98, -62, 208, 192);
-    ctx.fillStyle = sel ? '#1C161C' : '#141216'; ctx.fillRect(-104, -70, 208, 192);
+    const frameKey = sel ? 'ui_frame_pink' : 'ui_frame_grey';
+    let tb = [-100, -66, 200, 112];
+    if (img(frameKey)) {
+      const fim = img(frameKey), fw = 232, fh = fw * fim.height / fim.width;
+      ctx.drawImage(fim, -fw / 2, -10 - fh / 2, fw, fh);
+      tb = [-fw / 2 + fw * 0.07, -10 - fh / 2 + fh * 0.08, fw * 0.86, fh * 0.84];
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(-98, -62, 208, 192);
+      ctx.fillStyle = sel ? '#1C161C' : '#141216'; ctx.fillRect(-104, -70, 208, 192);
+    }
     if (sim) {
-      ctx.drawImage(sim, -100, -66, 200, 112);
+      ctx.drawImage(sim, ...tb);
     } else {
       const L = stageLayers(s);
-      ctx.drawImage(L.back, -100, -66, 200, 112);
-      ctx.drawImage(L.front, -100, -66, 200, 112);
+      ctx.drawImage(L.back, ...tb);
+      ctx.drawImage(L.front, ...tb);
     }
-    if (!sel) { ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(-100, -66, 200, 112); }
-    ctx.strokeStyle = sel ? s.accent : '#2A2A30'; ctx.lineWidth = 3; ctx.strokeRect(-100, -66, 200, 112);
-    sprayText(s.name, 0, 76, s.name.length > 13 ? 17 : 22, s.accent, { seed: 20 + i, drips: false, outline: '#0A0608' });
-    scratchText(s.sub, 0, 98, 10, '#9A9A9A');
-    scratchText('LEVEL ' + (i + 1), -96, -76, 12, s.accent, { align: 'left' });
-    if (sel) drawSafetyPin(88, -74, 0.5, '#C0C0C8');
+    if (!sel) { ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(...tb); }
+    if (!img(frameKey)) { ctx.strokeStyle = sel ? s.accent : '#2A2A30'; ctx.lineWidth = 3; ctx.strokeRect(-100, -66, 200, 112); }
+    sprayText(s.name, 0, 92, s.name.length > 13 ? 17 : 22, s.accent, { seed: 20 + i, drips: false, outline: '#0A0608' });
+    scratchText(s.sub, 0, 112, 10, '#9A9A9A');
+    scratchText('LEVEL ' + (i + 1), -100, -112, 12, s.accent, { align: 'left' });
+    if (sel) drawSafetyPin(96, -110, 0.5, '#C0C0C8');
     ctx.restore();
   }
 
@@ -3221,6 +3369,7 @@ const game = {
   p1Confirmed: false, p2Confirmed: false,
   pauseMenu: 0,
   stage: 0, stageSelect: 0,
+  roundWinner: 1, endReason: 'ko', perfect: false,
   controlsPlayer: 0,
   controlsAction: 0,
   controlsWaiting: false,
@@ -3383,7 +3532,7 @@ function updateFighting() {
   game.roundTimer -= 1/60;
   if (game.roundTimer <= 0) {
     game.roundTimer = 0;
-    endRound(game.f1.hp >= game.f2.hp ? 1 : 2);
+    endRound(game.f1.hp >= game.f2.hp ? 1 : 2, 'time');
     return;
   }
 
@@ -3407,8 +3556,8 @@ function updateFighting() {
   checkHits(game.f2, game.f1);
 
   // check KO
-  if (game.f1.hp <= 0) endRound(2);
-  else if (game.f2.hp <= 0) endRound(1);
+  if (game.f1.hp <= 0) endRound(2, 'ko');
+  else if (game.f2.hp <= 0) endRound(1, 'ko');
 
   updateParticles();
 }
@@ -3502,9 +3651,13 @@ function updateControls() {
   }
 }
 
-function endRound(winner) {
+function endRound(winner, reason) {
   game.state = 'roundEnd';
-  game.introTimer = 120;
+  game.introTimer = 150;
+  game.roundWinner = winner;
+  game.endReason = reason || 'ko';
+  const wf = winner === 1 ? game.f1 : game.f2;
+  game.perfect = wf.hp >= wf.maxHp;
   game.f1.flashTimer = 0; game.f2.flashTimer = 0;
   if (winner === 1) { game.f1.wins++; game.f1.winPose = true; game.introText = `${game.f1.breed.name} WINS!`; }
   else { game.f2.wins++; game.f2.winPose = true; game.introText = `${game.f2.breed.name} WINS!`; }
@@ -3569,22 +3722,43 @@ function drawRoundIntro() {
   const st = STAGES[game.stage];
   if (game.introText === 'FIGHT!') {
     const scale = 1 + (30 - Math.max(game.introTimer, 0)) * 0.025;
-    ctx.save();
-    ctx.translate(W/2, H/2);
-    ctx.scale(scale, scale);
-    sprayText('FIGHT!', 0, 0, 96, P.ko, { glow: 30, seed: 14, jitter: 3, outline: '#14040A' });
-    ctx.restore();
+    if (!drawImg('ban_fight', W/2, H/2 - 10, 130, { scale, glow: P.ko, blur: 30, dx: (Math.random() - 0.5) * 3, dy: (Math.random() - 0.5) * 3 })) {
+      ctx.save();
+      ctx.translate(W/2, H/2);
+      ctx.scale(scale, scale);
+      sprayText('FIGHT!', 0, 0, 96, P.ko, { glow: 30, seed: 14, jitter: 3, outline: '#14040A' });
+      ctx.restore();
+    }
   } else {
-    scratchText(st.name, W/2, H/2 - 78, 22, st.accent, { underline: true });
-    sprayText(game.introText, W/2, H/2 + 4, 84, P.gold, { glow: 16, seed: 15, outline: '#141004' });
+    scratchText(st.name, W/2, H/2 - 84, 22, st.accent, { underline: true });
+    const pop = 1 + Math.max(0, game.introTimer - 78) * 0.04;
+    if (!drawImg('ban_round_' + game.round, W/2, H/2 - 10, 104, { scale: pop, glow: P.p1, blur: 22 })) {
+      sprayText(game.introText, W/2, H/2 + 4, 84, P.gold, { glow: 16, seed: 15, outline: '#141004' });
+    }
   }
 }
 
 function drawRoundEnd() {
   ctx.fillStyle = 'rgba(4,4,10,0.45)';
   ctx.fillRect(0, 0, W, H);
-  sprayText(game.introText, W/2, H/2 - 30, 56, P.gold, { glow: 14, seed: 16, outline: '#141004' });
-  scratchText(`${game.f1.breed.name}  ${game.f1.wins} - ${game.f2.wins}  ${game.f2.breed.name}`, W/2, H/2 + 8, 18, '#C8C8C8');
+  const wf = game.roundWinner === 1 ? game.f1 : game.f2;
+  const col = game.roundWinner === 1 ? P.p1 : P.p2;
+  const t = 150 - game.introTimer;
+  drawImg(game.roundWinner === 1 ? 'ui_crown_p1' : 'ui_crown_p2', wf.x, wf.y - wf.breed.spriteH - 26 + Math.sin(game.frame * 0.12) * 4, 34, { glow: col, blur: 12 });
+  if (t < 55) {
+    const sc = 1 + Math.max(0, 10 - t) * 0.08;
+    const key = game.endReason === 'time' ? 'ban_time_up' : 'ban_ko';
+    if (!drawImg(key, W/2, H/2 - 30, 116, { scale: sc, glow: P.ko, blur: 30 })) {
+      sprayText(game.endReason === 'time' ? 'TIME UP' : 'K.O.', W/2, H/2 - 20, 80, P.ko, { glow: 20, seed: 23, outline: '#14040A' });
+    }
+    return;
+  }
+  const hasHead = drawImg('head_' + wf.breed.key, W/2 - 200, H/2 - 30, 130, { rot: -0.05 });
+  const tx = hasHead ? W/2 + 40 : W/2;
+  sprayText(wf.breed.name, tx, H/2 - 48, 56, col, { glow: 16, seed: 16, outline: '#0A0608' });
+  if (!drawImg('ban_wins', tx, H/2 + 4, 74, { glow: P.gold, blur: 16 })) sprayText('WINS!', tx, H/2 + 20, 56, P.gold, { glow: 14, seed: 24, outline: '#141004' });
+  if (game.perfect) drawImg('ban_perfect', tx, H/2 + 62, 52, { glow: P.p2, blur: 14, rot: -0.04 });
+  scratchText(`${game.f1.breed.name}  ${game.f1.wins} - ${game.f2.wins}  ${game.f2.breed.name}`, W/2, H/2 + 108, 18, '#C8C8C8');
 }
 
 function drawMatchEnd() {
@@ -3594,14 +3768,18 @@ function drawMatchEnd() {
   const winner = game.matchWinner === 1 ? game.f1 : game.f2;
   const col = game.matchWinner === 1 ? P.p1 : P.p2;
 
-  sprayText(winner.breed.name, W/2, H/2 - 56, 74, col, { glow: 22, seed: 17, outline: '#0A0608' });
-  sprayText('WINS THE MATCH', W/2, H/2 - 8, 36, P.gold, { glow: 10, seed: 18, drips: false, outline: '#141004' });
-  scratchText(`Final Score  ${game.f1.wins} - ${game.f2.wins}`, W/2, H/2 + 24, 16, '#C8C8C8');
+  const hasHead = drawImg('head_' + winner.breed.key, W/2 - 220, H/2 - 40, 170, { rot: -0.06, glow: col, blur: 20 });
+  const tx = hasHead ? W/2 + 50 : W/2;
+  drawImg(game.matchWinner === 1 ? 'ui_crown_p1' : 'ui_crown_p2', tx, H/2 - 118, 40, { glow: col, blur: 14 });
+  sprayText(winner.breed.name, tx, H/2 - 56, 74, col, { glow: 22, seed: 17, outline: '#0A0608' });
+  if (!drawImg('ban_wins', tx, H/2 + 4, 80, { glow: P.gold, blur: 16 })) sprayText('WINS', tx, H/2 + 10, 56, P.gold, { glow: 14, seed: 24, outline: '#141004' });
+  scratchText('THE MATCH', tx, H/2 + 56, 22, '#E0E0E0');
+  scratchText(`Final Score  ${game.f1.wins} - ${game.f2.wins}`, tx, H/2 + 82, 16, '#C8C8C8');
   if (game.vsAI && game.matchWinner === 1) {
-    scratchText(`Win Streak: ${game.winStreak}`, W/2, H/2 + 48, 16, P.gold);
+    scratchText(`Win Streak: ${game.winStreak}`, tx, H/2 + 104, 16, P.gold);
   }
   if (game.introTimer < 140 && Math.floor(game.frame / 25) % 2 === 0) {
-    sprayText('PRESS ENTER', W/2, H/2 + 104, 26, '#F4F4F4', { jitter: 2, seed: 19, drips: false, outline: '#0A0608' });
+    if (!drawImg('ban_press_enter', W/2, H - 44, 44, { dx: (Math.random() - 0.5) * 3 })) sprayText('PRESS ENTER', W/2, H/2 + 104, 26, '#F4F4F4', { jitter: 2, seed: 19, drips: false, outline: '#0A0608' });
   }
 }
 
@@ -3609,13 +3787,15 @@ function drawPaused() {
   ctx.fillStyle = 'rgba(10,10,20,0.65)';
   ctx.fillRect(0, 0, W, H);
 
-  sprayText('PAUSED', W/2, 128, 60, P.gold, { glow: 14, seed: 21, outline: '#141004' });
+  if (!drawImg('ui_paused', W/2, 158, 96, { glow: P.p1, blur: 24 })) sprayText('PAUSED', W/2, 168, 60, P.gold, { glow: 14, seed: 21, outline: '#141004' });
 
   const items = ['Resume', 'Configure Controls', 'Quit to Menu'];
+  const keys = ['menu_resume', 'menu_controls', 'menu_quit'];
   ctx.font = 'bold 22px monospace';
   for (let i = 0; i < items.length; i++) {
-    const y = 210 + i * 50;
+    const y = 250 + i * 64;
     const sel = i === game.pauseMenu;
+    if (drawImg('ui_' + keys[i] + (sel ? '_sel' : ''), W/2, y, 54, { alpha: sel ? 1 : 0.8, glow: sel ? P.p1 : null, blur: 14, scale: sel ? 1.05 : 1 })) continue;
     if (sel) {
       roundRect(ctx, W/2 - 180, y - 18, 360, 40, 8);
       ctx.fillStyle = 'rgba(255,255,255,0.08)';
@@ -3637,13 +3817,14 @@ function drawControls() {
   ctx.fillStyle = 'rgba(10,10,20,0.8)';
   ctx.fillRect(0, 0, W, H);
 
-  sprayText('CONFIGURE CONTROLS', W/2, 64, 38, P.gold, { glow: 10, seed: 22, drips: false, outline: '#141004' });
+  if (!drawImg('ui_header_controls', W/2, 48, 62, { glow: P.p2, blur: 14 })) sprayText('CONFIGURE CONTROLS', W/2, 64, 38, P.gold, { glow: 10, seed: 22, drips: false, outline: '#141004' });
 
   // player tabs
   const tabW = 160, tabH = 36, tabY = 85;
   for (let p = 0; p < 2; p++) {
     const tx = W/2 + (p === 0 ? -tabW - 8 : 8);
     const sel = p === game.controlsPlayer;
+    if (drawImg(p === 0 ? 'ui_tab_p1' : 'ui_tab_p2', tx + tabW/2, tabY + tabH/2, 44, { alpha: sel ? 1 : 0.45, glow: sel ? (p === 0 ? P.p1 : P.p2) : null, blur: 12 })) continue;
     roundRect(ctx, tx, tabY, tabW, tabH, 6);
     ctx.fillStyle = sel ? (p === 0 ? P.p1 : P.p2) : '#222';
     ctx.fill();
@@ -3674,8 +3855,10 @@ function drawControls() {
     ctx.textAlign = 'right';
     if (waiting) {
       const blink = Math.floor(game.frame / 15) % 2 === 0;
-      ctx.fillStyle = blink ? P.ko : P.gold;
-      ctx.fillText('Press a key...', W/2 + 220, y + 18);
+      if (!drawImg('ui_press_a_key', W/2 + 150, y + 13, 30, { alpha: blink ? 1 : 0.6 })) {
+        ctx.fillStyle = blink ? P.ko : P.gold;
+        ctx.fillText('Press a key...', W/2 + 220, y + 18);
+      }
     } else {
       ctx.fillStyle = sel ? '#fff' : '#888';
       ctx.fillText(keyName(bindings[player][ACTIONS[i]]), W/2 + 220, y + 18);
@@ -3777,6 +3960,7 @@ function render() {
       drawCat(game.f1);
       drawCat(game.f2);
       drawParticles();
+      drawHitFx();
       drawHUD();
       break;
     case 'paused':
@@ -3798,6 +3982,7 @@ function render() {
       drawCat(game.f1);
       drawCat(game.f2);
       drawParticles();
+      drawHitFx();
       drawHUD();
       drawRoundEnd();
       break;
@@ -3806,6 +3991,7 @@ function render() {
       drawCat(game.f1);
       drawCat(game.f2);
       drawParticles();
+      drawHitFx();
       drawHUD();
       drawMatchEnd();
       break;

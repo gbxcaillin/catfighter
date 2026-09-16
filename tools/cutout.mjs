@@ -28,6 +28,12 @@ const results = await page.evaluate((panels) => {
       lum[i] = 0.299 * r + 0.587 * gg + 0.114 * b;
       sat[i] = mx === 0 ? 0 : (mx - mn) / mx;
     }
+    let a2;
+    if (opts && opts.mode === 'lumkey') {
+      const [L0, L1] = opts.lum || [140, 235];
+      a2 = new Float32Array(N);
+      for (let i = 0; i < N; i++) a2[i] = Math.max(0, Math.min(1, (lum[i] - L0) / (L1 - L0)));
+    } else {
     const mask = new Uint8Array(N); // 1 = background
     const morphR = (src, val, r) => {
       const dst = new Uint8Array(N);
@@ -167,7 +173,7 @@ const results = await page.evaluate((panels) => {
     for (let i = 0; i < N; i++) if (mask[i]) alpha[i] = 0;
     const ER = (opts && opts.erode) == null ? 1 : opts.erode;
     for (let e = 0; e < ER; e++) { const cp = Float32Array.from(alpha); for (let py = 1; py < h - 1; py++) for (let px = 1; px < w - 1; px++) { const i = py * w + px; if (cp[i] && (!cp[i-1] || !cp[i+1] || !cp[i-w] || !cp[i+w])) alpha[i] = 0; } }
-    const a2 = new Float32Array(N);
+    a2 = new Float32Array(N);
     for (let py = 0; py < h; py++) for (let px = 0; px < w; px++) {
       const i = py * w + px;
       if (alpha[i] === 0) { a2[i] = 0; continue; }
@@ -177,6 +183,7 @@ const results = await page.evaluate((panels) => {
         cnt++; if (alpha[qy * w + qx] === 0) bgNear++;
       }
       a2[i] = bgNear === 0 ? 1 : Math.max(0, 1 - bgNear / cnt * 1.6);
+    }
     }
     let minX = w, minY = h, maxX = 0, maxY = 0;
     for (let i = 0; i < N; i++) {
