@@ -57,7 +57,7 @@ const results = await page.evaluate((panels) => {
           sizes.push(sz);
         }
         const big = Math.max(0, ...sizes);
-        const keepC = new Uint8Array(sizes.length); sizes.forEach((sz, i) => { keepC[i] = sz >= big * 0.2 ? 1 : 0; });
+        const keepC = new Uint8Array(sizes.length); sizes.forEach((sz, i) => { keepC[i] = sz >= big * (opts.keepFrac || 0.2) ? 1 : 0; });
         for (let i = 0; i < N; i++) { if (a2[i] > 0 && (comp[i] < 0 || !keepC[comp[i]])) a2[i] = 0; }
         // faint edge pixels adjacent to kept components survive; strip isolated faint ones
         for (let i = 0; i < N; i++) if (a2[i] > 0 && a2[i] < 0.3) { const px = i % w, py = (i / w) | 0; let ok = false; for (const j of [px > 0 ? i - 1 : -1, px < w - 1 ? i + 1 : -1, py > 0 ? i - w : -1, py < h - 1 ? i + w : -1]) if (j >= 0 && comp[j] >= 0 && keepC[comp[j]]) ok = true; if (!ok) a2[i] = 0; }
