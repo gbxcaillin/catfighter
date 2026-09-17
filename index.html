@@ -449,10 +449,10 @@ function lastKeyPressed() {
 }
 
 const DEFAULT_BINDINGS = {
-  p1: { left:'KeyA', right:'KeyD', up:'KeyW', down:'KeyS', light:'KeyJ', heavy:'KeyK', special:'KeyL' },
-  p2: { left:'ArrowLeft', right:'ArrowRight', up:'ArrowUp', down:'ArrowDown', light:'Numpad1', heavy:'Numpad2', special:'Numpad3' },
+  p1: { left:'KeyA', right:'KeyD', up:'KeyW', down:'KeyS', light:'KeyJ', heavy:'KeyK', special:'KeyL', block:'KeyH' },
+  p2: { left:'ArrowLeft', right:'ArrowRight', up:'ArrowUp', down:'ArrowDown', light:'Numpad1', heavy:'Numpad2', special:'Numpad3', block:'Numpad0' },
 };
-const P2_ALT = { light:'Digit1', heavy:'Digit2', special:'Digit3' };
+const P2_ALT = { light:'Digit1', heavy:'Digit2', special:'Digit3', block:'Digit0' };
 
 let bindings = loadBindings();
 function loadBindings() {
@@ -460,7 +460,7 @@ function loadBindings() {
     const s = localStorage.getItem('catfighter_bindings');
     if (s) {
       const b = JSON.parse(s);
-      if (b.p1 && b.p2) return b;
+      if (b.p1 && b.p2) { for (const p of ['p1', 'p2']) if (!b[p].block) b[p].block = DEFAULT_BINDINGS[p].block; return b; }
     }
   } catch(e) {}
   return JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
@@ -469,8 +469,8 @@ function saveBindings() {
   try { localStorage.setItem('catfighter_bindings', JSON.stringify(bindings)); } catch(e) {}
 }
 
-const ACTIONS = ['left','right','up','down','light','heavy','special'];
-const ACTION_LABELS = { left:'Move Left', right:'Move Right', up:'Jump', down:'Crouch', light:'Light Attack', heavy:'Heavy Attack', special:'Special' };
+const ACTIONS = ['left','right','up','down','light','heavy','special','block'];
+const ACTION_LABELS = { left:'Move Left', right:'Move Right', up:'Jump', down:'Crouch', light:'Light Attack', heavy:'Heavy Attack', special:'Special', block:'Block' };
 const KEY_DISPLAY = {
   KeyA:'A',KeyB:'B',KeyC:'C',KeyD:'D',KeyE:'E',KeyF:'F',KeyG:'G',KeyH:'H',KeyI:'I',KeyJ:'J',KeyK:'K',KeyL:'L',KeyM:'M',
   KeyN:'N',KeyO:'O',KeyP:'P',KeyQ:'Q',KeyR:'R',KeyS:'S',KeyT:'T',KeyU:'U',KeyV:'V',KeyW:'W',KeyX:'X',KeyY:'Y',KeyZ:'Z',
@@ -493,6 +493,7 @@ const P1 = {
   light: () => wasPressed(bindings.p1.light),
   heavy: () => wasPressed(bindings.p1.heavy),
   special: () => wasPressed(bindings.p1.special),
+  block: () => isDown(bindings.p1.block),
 };
 
 const P2 = {
@@ -503,10 +504,11 @@ const P2 = {
   light: () => wasPressed(bindings.p2.light) || wasPressed(P2_ALT.light),
   heavy: () => wasPressed(bindings.p2.heavy) || wasPressed(P2_ALT.heavy),
   special: () => wasPressed(bindings.p2.special) || wasPressed(P2_ALT.special),
+  block: () => isDown(bindings.p2.block) || isDown(P2_ALT.block),
 };
 
 // Touch state
-const touch = { left:false, right:false, up:false, down:false, light:false, heavy:false, special:false, any:false, confirm:false, pause:false };
+const touch = { left:false, right:false, up:false, down:false, light:false, heavy:false, special:false, block:false, any:false, confirm:false, pause:false };
 let touchActive = false;
 const touchJust = { light:false, heavy:false, special:false, confirm:false, pause:false, left:false, right:false, up:false, down:false, any:false };
 let tapPos = null;
@@ -516,9 +518,10 @@ const TBTN = [
   { id:'right', x:170, y:H-85, r:32 },
   { id:'up',    x:130, y:H-135, r:32 },
   { id:'down',  x:130, y:H-40, r:32 },
-  { id:'light', x:W-185, y:H-65, r:36, label:'L' },
-  { id:'heavy', x:W-105, y:H-65, r:36, label:'H' },
-  { id:'special',x:W-145,y:H-130,r:30, label:'S' },
+  { id:'light', x:W-190, y:H-58, r:27, label:'L' },
+  { id:'heavy', x:W-100, y:H-72, r:40, label:'H' },
+  { id:'special',x:W-150,y:H-142,r:30, label:'S' },
+  { id:'block', x:W-238, y:H-122, r:28, label:'B' },
   { id:'confirm',x:W/2,  y:H-65, r:28, label:'OK' },
   { id:'pause',  x:W/2+98, y:30,  r:18, label:'II' },
 ];
@@ -558,13 +561,14 @@ canvas.addEventListener('touchcancel', handleTouches, {passive:false});
 
 function drawTouchUI() {
   if (!touchActive) return;
-  const TOUCH_IMG = { left: 'btn_dpad_right', right: 'btn_dpad_right', up: 'btn_dpad_up', down: 'btn_dpad_down', light: 'btn_light', heavy: 'btn_heavy', special: 'btn_special', confirm: 'btn_confirm', pause: 'btn_pause' };
-  const inFight = game.state === 'fighting' || game.state === 'roundIntro' || game.state === 'paused' || game.state === 'controls';
+  const TOUCH_IMG = { left: 'btn_dpad_right', right: 'btn_dpad_right', up: 'btn_dpad_up', down: 'btn_dpad_down', light: 'btn_fist', heavy: 'btn_fist', special: 'btn_special', block: 'btn_block', confirm: 'btn_confirm', pause: 'btn_pause' };
+  const inFight = game.state === 'fighting' || game.state === 'roundIntro' || game.state === 'paused';
   for (const btn of TBTN) {
     if (btn.id === 'pause' && !inFight) continue;
     if (btn.id === 'confirm' && game.state === 'fighting') continue;
     const pressed = touch[btn.id];
-    if (drawImg('ui_' + TOUCH_IMG[btn.id], btn.x, btn.y, btn.r * 2.2, { alpha: pressed ? 1 : 0.75, scale: pressed ? 1.12 : 1, flip: btn.id === 'left', glow: btn.id === 'heavy' ? P.p1 : null, blur: 18 })) continue;
+    const heavyPulse = btn.id === 'heavy' ? 22 + Math.sin(game.frame * 0.15) * 8 : 0;
+    if (drawImg('ui_' + TOUCH_IMG[btn.id], btn.x, btn.y, btn.r * 2.2, { alpha: pressed ? 1 : 0.8, scale: pressed ? 1.12 : 1, flip: btn.id === 'left', glow: heavyPulse ? P.p1 : null, blur: heavyPulse })) continue;
     ctx.globalAlpha = pressed ? 0.5 : 0.2;
     ctx.fillStyle = '#fff';
     ctx.beginPath();
@@ -590,6 +594,7 @@ function p1Input() {
     light: P1.light() || touchJust.light,
     heavy: P1.heavy() || touchJust.heavy,
     special: P1.special() || touchJust.special,
+    block: P1.block() || touch.block,
   };
 }
 
@@ -637,7 +642,7 @@ const UI_KEYS = ['title_logo','menu_resume','menu_controls','menu_quit','menu_re
   'digit_0','digit_1','digit_2','digit_3','digit_4','digit_5','digit_6','digit_7','digit_8','digit_9',
   'tab_p1','tab_p2','press_a_key','hud_healthbar_p1','hud_healthbar_p2','hud_timer','hud_meter_p1','hud_meter_p2',
   'pip_p1','pip_p2','pip_off','hud_special_ready','crown_p1','crown_p2','crown','skull','skull_p1','skull_p2','x_p1','x_p2','x',
-  'btn_dpad_up','btn_dpad_down','btn_dpad_left','btn_dpad_right','btn_light','btn_heavy','btn_special',
+  'btn_dpad_up','btn_dpad_down','btn_dpad_left','btn_dpad_right','btn_fist','btn_special','btn_block',
   'paused','mode_1p','mode_2p','mode_1p_sel','mode_2p_sel','polaroid','polaroid_p1','polaroid_p2','frame_chain','frame_pink','frame_grey','frame_cyan',
   'header_fighter','header_ground','header_battle','header_controls'];
 for (const k of UI_KEYS) loadImage('ui_' + k, `assets/ui/${k}.png`);
@@ -784,8 +789,8 @@ function createFighter(breedKey, startX, facing) {
     flashTimer: 0,
     // special move projectile/state
     specActive: false, specData: null,
-    currentInput: { left:false, right:false, up:false, down:false, light:false, heavy:false, special:false },
-    winPose: false,
+    currentInput: { left:false, right:false, up:false, down:false, light:false, heavy:false, special:false, block:false },
+    winPose: false, atkKind: 'stand',
   };
 }
 
@@ -803,11 +808,13 @@ function fighterAtkHitbox(f) {
   const su = atk.su, ac = atk.ac;
   if (f.stateFrame < su || f.stateFrame >= su + ac) return null;
   const ox = f.facing * (f.breed.bodyRX + 5) * ART;
-  const rx = atk.rx * ART, ry = atk.ry * ART;
+  let rx = atk.rx * ART, ry = atk.ry * ART;
+  let y = f.y - (f.breed.bodyRY * 2 + f.breed.headR + 5) * ART;
+  if (f.atkKind === 'air') { y = f.y - f.breed.bodyRY * 1.4 * ART; ry *= 1.4; }
+  else if (f.atkKind === 'crouch') { y = f.y - f.breed.bodyRY * 1.3 * ART; ry *= 0.9; rx *= 1.15; }
   return {
     x: f.x + ox + (f.facing > 0 ? 0 : -rx),
-    y: f.y - (f.breed.bodyRY * 2 + f.breed.headR + 5) * ART,
-    w: rx, h: ry,
+    y, w: rx, h: ry,
   };
 }
 
@@ -827,7 +834,7 @@ function updateFighter(f, input, opp) {
   f.displayHp = lerp(f.displayHp, f.hp, 0.12);
 
   // auto-face opponent
-  if (f.state === 'idle' || f.state === 'walk' || f.state === 'crouch') {
+  if (f.state === 'idle' || f.state === 'walk' || f.state === 'crouch' || f.state === 'block') {
     f.facing = opp.x > f.x ? 1 : -1;
   }
 
@@ -881,11 +888,12 @@ function updateFighter(f, input, opp) {
   // attacks
   if (f.state === 'light' || f.state === 'heavy') {
     const atk = atkData(f);
-    f.vx *= 0.9;
+    f.vx *= f.atkKind === 'air' ? 0.98 : 0.9;
     f.x += f.vx;
-    if (f.stateFrame >= totalAtkFrames(atk)) {
-      f.state = 'idle'; f.stateFrame = 0;
-      f.hitThisAtk = false;
+    if (f.atkKind === 'air' && f.grounded) { f.state = 'idle'; f.stateFrame = 0; f.hitThisAtk = false; f.atkKind = 'stand'; }
+    else if (f.stateFrame >= totalAtkFrames(atk)) {
+      f.state = f.atkKind === 'crouch' && input.down ? 'crouch' : 'idle'; f.stateFrame = 0;
+      f.hitThisAtk = false; f.atkKind = 'stand';
     }
     clampStage(f);
     return;
@@ -910,11 +918,30 @@ function updateFighter(f, input, opp) {
   if (f.grounded) {
     f.vx *= GROUND_FRIC;
 
+    // block stance
+    if (input.block && !input.down) {
+      if (f.state !== 'block') { f.state = 'block'; f.stateFrame = 0; }
+      f.vx *= 0.6;
+      f.x += f.vx;
+      clampStage(f);
+      return;
+    } else if (f.state === 'block') {
+      f.state = 'idle'; f.stateFrame = 0;
+    }
+
     // crouch
     if (input.down) {
       if (f.state !== 'crouch') { f.state = 'crouch'; f.stateFrame = 0; }
     } else if (f.state === 'crouch') {
       f.state = 'idle'; f.stateFrame = 0;
+    }
+
+    // crouching attacks
+    if (f.state === 'crouch' && (input.light || input.heavy)) {
+      f.state = input.heavy ? 'heavy' : 'light'; f.stateFrame = 0; f.hitThisAtk = false; f.atkKind = 'crouch';
+      f.vx += f.facing * 1.5;
+      f.x += f.vx; clampStage(f);
+      return;
     }
 
     // jump
@@ -927,11 +954,11 @@ function updateFighter(f, input, opp) {
 
     // attacks (grounded only for simplicity)
     if (input.light && f.state !== 'crouch') {
-      f.state = 'light'; f.stateFrame = 0; f.hitThisAtk = false;
+      f.state = 'light'; f.stateFrame = 0; f.hitThisAtk = false; f.atkKind = 'stand';
       f.vx += f.facing * 2;
     }
     if (input.heavy && f.state !== 'crouch') {
-      f.state = 'heavy'; f.stateFrame = 0; f.hitThisAtk = false;
+      f.state = 'heavy'; f.stateFrame = 0; f.hitThisAtk = false; f.atkKind = 'stand';
       f.vx += f.facing * 3;
     }
     if (input.special && f.special >= SPECIAL_MAX && f.state !== 'crouch') {
@@ -947,12 +974,10 @@ function updateFighter(f, input, opp) {
       f.state = 'walk'; f.stateFrame = 0;
     }
   } else {
-    // air attacks
-    if (input.light) {
-      f.state = 'light'; f.stateFrame = 0; f.hitThisAtk = false;
-    }
-    if (input.heavy) {
-      f.state = 'heavy'; f.stateFrame = 0; f.hitThisAtk = false;
+    // air attacks: dive forward
+    if (input.light || input.heavy) {
+      f.state = input.heavy ? 'heavy' : 'light'; f.stateFrame = 0; f.hitThisAtk = false; f.atkKind = 'air';
+      f.vx += f.facing * 2.5;
     }
   }
 
@@ -969,6 +994,7 @@ function clampStage(f) {
 function isBlocking(f, opp) {
   if (f.state === 'hitstun' || f.state === 'ko' || f.state === 'light' || f.state === 'heavy' || f.state === 'special') return false;
   if (!f.currentInput) return false;
+  if (f.state === 'block' || f.currentInput.block) return true;
   const awayDir = opp.x > f.x ? -1 : 1;
   return awayDir < 0 ? f.currentInput.left : f.currentInput.right;
 }
@@ -1188,7 +1214,7 @@ function aiUpdate(self, opp) {
 }
 
 function aiToInput(self, opp) {
-  const inp = { left:false, right:false, up:false, down:false, light:false, heavy:false, special:false };
+  const inp = { left:false, right:false, up:false, down:false, light:false, heavy:false, special:false, block:false };
   const toOpp = opp.x > self.x ? 'right' : 'left';
   const awayOpp = toOpp === 'right' ? 'left' : 'right';
 
@@ -1198,9 +1224,9 @@ function aiToInput(self, opp) {
     case 'light': inp.light = true; break;
     case 'heavy': inp.heavy = true; break;
     case 'special': inp.special = true; break;
-    case 'block': inp[awayOpp] = true; break;
+    case 'block': inp.block = true; break;
     case 'jump_back': inp[awayOpp] = true; inp.up = true; break;
-    case 'jump_in': inp[toOpp] = true; inp.up = true; break;
+    case 'jump_in': inp[toOpp] = true; inp.up = true; if (!self.grounded && self.vy > -2 && Math.abs(self.x - opp.x) < 140 * ART) inp.heavy = true; break;
   }
   return inp;
 }
@@ -1279,7 +1305,7 @@ function drawCat(f) {
     case 'hitstun':
       bodyOY = Math.sin(sf * 0.4) * 4; headOY = Math.sin(sf * 0.5) * 3;
       break;
-    case 'blockstun':
+    case 'blockstun': case 'block':
       bodyOY = 3; armExt = -5;
       break;
     case 'ko':
@@ -1898,11 +1924,11 @@ function spritePose(f, S) {
     case 'walk': { const a = spriteSeq(S, 'walk'); return a.length ? a[((sf / 7) | 0) % a.length] : idle; }
     case 'jump': case 'airborne': return at('jump', f.vy < 0 ? 0 : 1);
     case 'crouch': return at('crouch', 0);
-    case 'light': return at('light', sf < b.lAtk.su ? 0 : 1);
-    case 'heavy': return at('heavy', sf < b.hAtk.su ? 0 : 1);
+    case 'light': return f.atkKind === 'crouch' ? at('crouch', 0) : at('light', sf < b.lAtk.su ? 0 : 1);
+    case 'heavy': return f.atkKind === 'crouch' ? at('crouch', 0) : at('heavy', sf < b.hAtk.su ? 0 : 1);
     case 'special': return spriteSeq(S, 'special').length ? step('special', 8) : at('roar', 0);
     case 'hitstun': return step('hit', 6);
-    case 'blockstun': return at('block', 0);
+    case 'blockstun': case 'block': return at('block', 0);
     case 'ko': { const hit = spriteSeq(S, 'hit'); if (sf < 8 && hit.length) return hit[hit.length - 1]; return step('ko', 8, 8); }
   }
   return idle;
@@ -1924,7 +1950,11 @@ function drawSpriteCat(f, S) {
     case 'idle': sy = 1 + Math.sin(sf * 0.08) * 0.012; sx = 1 - Math.sin(sf * 0.08) * 0.006; break;
     case 'walk': bob = -Math.abs(Math.sin(sf * 0.17)) * 4; rot = Math.sin(sf * 0.17) * 0.02; break;
     case 'jump': case 'airborne': rot = 0.06; break;
-    case 'light': case 'heavy': ox = sf < atk.su ? -4 : active ? 8 : lerp(8, 0, (sf - atk.su - atk.ac) / atk.re); break;
+    case 'light': case 'heavy':
+      ox = sf < atk.su ? -4 : active ? (f.atkKind === 'crouch' ? 16 : 8) : lerp(8, 0, (sf - atk.su - atk.ac) / atk.re);
+      if (f.atkKind === 'air') rot = 0.42;
+      break;
+    case 'block': ox = -2; sx = 0.98; break;
     case 'special': sy = 1 + Math.sin(sf * 0.3) * 0.02; break;
     case 'hitstun': rot = -0.08 + Math.sin(sf * 0.5) * 0.03; ox = -3; break;
     case 'blockstun': ox = -2; break;
@@ -1958,7 +1988,8 @@ function drawSpriteCat(f, S) {
     ctx.save();
     ctx.strokeStyle = b.specColor; ctx.shadowColor = b.specColor; ctx.shadowBlur = 14;
     ctx.lineWidth = f.state === 'heavy' ? 6 : 4; ctx.lineCap = 'round'; ctx.globalAlpha = 0.75;
-    ctx.beginPath(); ctx.arc(w * 0.3, -h * 0.55, h * (f.state === 'heavy' ? 0.42 : 0.34), -1.0, 0.45); ctx.stroke();
+    const sy0 = f.atkKind === 'crouch' ? -h * 0.22 : -h * 0.55;
+    ctx.beginPath(); ctx.arc(w * 0.3, sy0, h * (f.state === 'heavy' ? 0.42 : 0.34), -1.0, 0.45); ctx.stroke();
     ctx.restore();
   }
   if (f.state === 'special' && f.specActive && f.specData) { ctx.save(); ctx.scale(ART, ART); drawSpecialEffect(f); ctx.restore(); }
@@ -3561,7 +3592,7 @@ function updateFighting() {
   const inp1 = p1Input();
   const inp2 = game.vsAI ? aiUpdate(game.f2, game.f1) : {
     left: P2.left(), right: P2.right(), up: P2.up(), down: P2.down(),
-    light: P2.light(), heavy: P2.heavy(), special: P2.special(),
+    light: P2.light(), heavy: P2.heavy(), special: P2.special(), block: P2.block(),
   };
 
   game.f1.currentInput = inp1;
@@ -3863,12 +3894,12 @@ function drawControls() {
   ctx.textAlign = 'left';
   const startY = 155;
   for (let i = 0; i < ACTIONS.length; i++) {
-    const y = startY + i * 42;
+    const y = startY + i * 38;
     const sel = i === game.controlsAction;
     const waiting = sel && game.controlsWaiting;
 
     if (sel) {
-      roundRect(ctx, W/2 - 240, y - 4, 480, 34, 6);
+      roundRect(ctx, W/2 - 240, y - 4, 480, 32, 6);
       ctx.fillStyle = waiting ? 'rgba(255,200,50,0.12)' : 'rgba(255,255,255,0.06)';
       ctx.fill();
     }
