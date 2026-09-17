@@ -1,0 +1,233 @@
+{
+ "idle_1": [
+  25,
+  15,
+  170,
+  357,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "idle_2": [
+  195,
+  15,
+  170,
+  357,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "walk_1": [
+  380,
+  15,
+  172,
+  357,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "walk_2": [
+  555,
+  15,
+  187,
+  357,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "walk_3": [
+  742,
+  15,
+  168,
+  357,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "walk_4": [
+  910,
+  15,
+  195,
+  357,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "walk_5": [
+  1108,
+  15,
+  162,
+  357,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "crouch_1": [
+  1272,
+  115,
+  253,
+  250,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "jump_1": [
+  15,
+  378,
+  253,
+  307,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "jump_2": [
+  272,
+  378,
+  260,
+  307,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "light_1": [
+  532,
+  378,
+  250,
+  307,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "light_2": [
+  770,
+  378,
+  282,
+  307,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "heavy_1": [
+  1018,
+  378,
+  234,
+  307,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "heavy_2": [
+  1248,
+  378,
+  277,
+  307,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "special_1": [
+  15,
+  678,
+  220,
+  337,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "special_2": [
+  192,
+  720,
+  216,
+  295,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "block_1": [
+  405,
+  678,
+  217,
+  337,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "hit_1": [
+  622,
+  678,
+  170,
+  337,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "hit_2": [
+  778,
+  678,
+  237,
+  337,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "ko_1": [
+  1025,
+  860,
+  337,
+  150,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ],
+ "win_1": [
+  1350,
+  678,
+  175,
+  337,
+  {
+   "mode": "chroma",
+   "largest": true,
+   "erode": 0
+  }
+ ]
+}

@@ -46,6 +46,22 @@ const results = await page.evaluate((panels) => {
         }
         if (a > 0 && gg > Math.max(r, b) * 1.15 && !(opts.keepGreen)) d[i * 4 + 1] = Math.max(r, b);
       }
+      if (opts.largest) {
+        // keep only the main figure (drops slivers of neighbouring cells)
+        const comp = new Int32Array(N).fill(-1); const sizes = [];
+        for (let s0 = 0; s0 < N; s0++) {
+          if (a2[s0] < 0.3 || comp[s0] >= 0) continue;
+          const st = [s0]; comp[s0] = sizes.length; let sz = 0;
+          while (st.length) { const i = st.pop(); sz++; const px = i % w, py = (i / w) | 0;
+            for (const j of [px > 0 ? i - 1 : -1, px < w - 1 ? i + 1 : -1, py > 0 ? i - w : -1, py < h - 1 ? i + w : -1]) if (j >= 0 && a2[j] >= 0.3 && comp[j] < 0) { comp[j] = sizes.length; st.push(j); } }
+          sizes.push(sz);
+        }
+        const big = Math.max(0, ...sizes);
+        const keepC = new Uint8Array(sizes.length); sizes.forEach((sz, i) => { keepC[i] = sz >= big * 0.2 ? 1 : 0; });
+        for (let i = 0; i < N; i++) { if (a2[i] > 0 && (comp[i] < 0 || !keepC[comp[i]])) a2[i] = 0; }
+        // faint edge pixels adjacent to kept components survive; strip isolated faint ones
+        for (let i = 0; i < N; i++) if (a2[i] > 0 && a2[i] < 0.3) { const px = i % w, py = (i / w) | 0; let ok = false; for (const j of [px > 0 ? i - 1 : -1, px < w - 1 ? i + 1 : -1, py > 0 ? i - w : -1, py < h - 1 ? i + w : -1]) if (j >= 0 && comp[j] >= 0 && keepC[comp[j]]) ok = true; if (!ok) a2[i] = 0; }
+      }
     } else if (opts && opts.mode === 'lumkey') {
       const [L0, L1] = opts.lum || [140, 235];
       a2 = new Float32Array(N);
