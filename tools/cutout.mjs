@@ -29,7 +29,24 @@ const results = await page.evaluate((panels) => {
       sat[i] = mx === 0 ? 0 : (mx - mn) / mx;
     }
     let a2;
-    if (opts && opts.mode === 'lumkey') {
+    if (opts && opts.mode === 'chroma') {
+      // green-screen key on green dominance, then un-mix the key colour out of soft edges
+      const [t0, t1] = opts.chroma || [110, 215];
+      a2 = new Float32Array(N);
+      for (let i = 0; i < N; i++) {
+        const r = d[i * 4], gg = d[i * 4 + 1], b = d[i * 4 + 2];
+        const gdom = gg - Math.max(r, b);
+        const a = 1 - Math.max(0, Math.min(1, (gdom - t0) / (t1 - t0)));
+        a2[i] = a;
+        if (a > 0 && a < 1) {
+          const k = 1 - a;
+          d[i * 4] = Math.max(0, Math.min(255, (r - k * 0) / a));
+          d[i * 4 + 1] = Math.max(0, Math.min(255, (gg - k * 255) / a));
+          d[i * 4 + 2] = Math.max(0, Math.min(255, (b - k * 0) / a));
+        }
+        if (a > 0 && gg > Math.max(r, b) * 1.15 && !(opts.keepGreen)) d[i * 4 + 1] = Math.max(r, b);
+      }
+    } else if (opts && opts.mode === 'lumkey') {
       const [L0, L1] = opts.lum || [140, 235];
       a2 = new Float32Array(N);
       for (let i = 0; i < N; i++) a2[i] = Math.max(0, Math.min(1, (lum[i] - L0) / (L1 - L0)));

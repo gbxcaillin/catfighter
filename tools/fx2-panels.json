@@ -1,0 +1,167 @@
+{
+ "furball_1": [
+  15,
+  85,
+  163,
+  180,
+  {
+   "chroma": [
+    150,
+    235
+   ],
+   "keepGreen": true,
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "furball_2": [
+  182,
+  85,
+  160,
+  180,
+  {
+   "chroma": [
+    150,
+    235
+   ],
+   "keepGreen": true,
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "furball_3": [
+  346,
+  85,
+  159,
+  180,
+  {
+   "chroma": [
+    150,
+    235
+   ],
+   "keepGreen": true,
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "shockwave": [
+  485,
+  75,
+  540,
+  205,
+  {
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "hypno_1": [
+  1030,
+  95,
+  122,
+  145,
+  {
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "hypno_2": [
+  1153,
+  85,
+  155,
+  170,
+  {
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "hypno_3": [
+  1308,
+  70,
+  214,
+  200,
+  {
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "dash_streak": [
+  15,
+  415,
+  530,
+  180,
+  {
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "swipe_light": [
+  595,
+  375,
+  210,
+  250,
+  {
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "swipe_heavy": [
+  825,
+  375,
+  285,
+  280,
+  {
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "shadow": [
+  1105,
+  435,
+  423,
+  130,
+  {
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "dust_1": [
+  25,
+  765,
+  180,
+  120,
+  {
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "dust_2": [
+  235,
+  735,
+  210,
+  150,
+  {
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "dust_3": [
+  475,
+  715,
+  290,
+  180,
+  {
+   "mode": "chroma",
+   "erode": 0
+  }
+ ],
+ "ko_burst": [
+  1045,
+  585,
+  483,
+  420,
+  {
+   "mode": "chroma",
+   "erode": 0
+  }
+ ]
+}

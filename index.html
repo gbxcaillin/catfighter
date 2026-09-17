@@ -652,7 +652,7 @@ loadImage('ui_bg_corkboard', 'assets/ui/bg_corkboard.jpg');
 loadImage('ui_bg_chainlink', 'assets/ui/bg_chainlink.jpg');
 for (const k of UI_KEYS) loadImage('ui_' + k, `assets/ui/${k}.png`);
 for (const k of ['round_1','round_2','round_3','fight','ko','time_up','wins','perfect','press_enter','the_match','final_score','win_streak']) loadImage('ban_' + k, `assets/banners/${k}.png`);
-for (const k of ['hit_1','hit_2','hit_3','hit_4','hit_5','hit_6']) loadImage('fx_' + k, `assets/fx/${k}.png`);
+for (const k of ['hit_1','hit_2','hit_3','hit_4','hit_5','hit_6','furball_1','furball_2','furball_3','shockwave','hypno_1','hypno_2','hypno_3','dash_streak','swipe_light','swipe_heavy','shadow','dust_1','dust_2','dust_3','ko_burst']) loadImage('fx_' + k, `assets/fx/${k}.png`);
 // fill-channel rectangles inside the bar art, as fractions of the image
 const HUD_FILL = { p1: [0.27, 0.95, 0.31, 0.62], p2: [0.088, 0.868, 0.29, 0.63], m1: [0.10, 0.906, 0.22, 0.78], m2: [0.133, 0.80, 0.22, 0.78] };
 
@@ -676,9 +676,9 @@ function drawImg(key, cx, cy, h, o = {}) {
 
 // sprite hit effects
 const hitFx = [];
-function spawnHitFx(key, x, y, size, life) {
+function spawnHitFx(key, x, y, size, life, o = {}) {
   if (!img(key)) return;
-  hitFx.push({ key, x, y, size, life, t: 0, rot: Math.random() * 6.28 });
+  hitFx.push({ key, x, y, size, life, t: 0, rot: o.rot != null ? o.rot : Math.random() * 6.28, add: o.add !== false, grow: o.grow == null ? 0.9 : o.grow, spin: o.spin == null ? 0.3 : o.spin, dy: o.dy || 0 });
 }
 function updateHitFx() {
   for (let i = hitFx.length - 1; i >= 0; i--) { hitFx[i].t++; if (hitFx[i].t >= hitFx[i].life) hitFx.splice(i, 1); }
@@ -686,7 +686,7 @@ function updateHitFx() {
 function drawHitFx() {
   for (const f of hitFx) {
     const k = f.t / f.life;
-    drawImg(f.key, f.x, f.y, f.size * (0.55 + k * 0.9), { alpha: 1 - k * k, add: true, rot: f.rot + k * 0.3 });
+    drawImg(f.key, f.x, f.y + f.dy * k, f.size * (0.55 + k * f.grow), { alpha: 1 - k * k, add: f.add, rot: f.rot + k * f.spin });
   }
 }
 
@@ -851,6 +851,7 @@ function updateFighter(f, input, opp) {
       f.y = GROUND_Y;
       f.vy = 0;
       f.grounded = true;
+      spawnHitFx('fx_dust_1', f.x, f.y - 8, 110, 16, { add: false, rot: 0, spin: 0, grow: 0.6, dy: -10 });
       if (f.state === 'airborne' || f.state === 'jump') {
         f.state = 'idle'; f.stateFrame = 0;
       }
@@ -1128,8 +1129,9 @@ function applyHit(target, attacker, dmg, kb, stunFrames, sparkX, sparkY) {
     addShake(MAX_SHAKE);
     SFX.ko();
     spawnParts(sparkX, sparkY, 25, P.ko, 8, 25, 5);
-    spawnHitFx('fx_hit_5', sparkX, sparkY, 200, 26);
-    spawnHitFx('fx_hit_6', sparkX, sparkY, 140, 20);
+    if (img('fx_ko_burst')) spawnHitFx('fx_ko_burst', sparkX, sparkY, 300, 30, { grow: 1.2, spin: 0.15 });
+    else { spawnHitFx('fx_hit_5', sparkX, sparkY, 200, 26); spawnHitFx('fx_hit_6', sparkX, sparkY, 140, 20); }
+    spawnHitFx('fx_dust_3', target.x, GROUND_Y - 10, 180, 30, { add: false, rot: 0, spin: 0, grow: 0.7, dy: -14 });
     spawnParts(sparkX, sparkY, 15, P.gold, 6, 30, 4);
   }
 }
@@ -1885,6 +1887,11 @@ function drawProjectiles(f) {
   if (f.specActive && f.specData && f.specData.type === 'furball') {
     for (const ball of f.specData.balls) {
       if (ball.hit) continue;
+      if (img('fx_furball_1')) {
+        const fr = 1 + ((gf >> 2) % 3);
+        drawImg('fx_furball_' + fr, ball.x, ball.y, 26 * ART, { rot: gf * 0.25 * f.facing, glow: b.specColor, blur: 14 });
+        continue;
+      }
       ctx.save();
       ctx.translate(ball.x, ball.y);
       ctx.scale(ART, ART);
@@ -1972,8 +1979,10 @@ function drawSpriteCat(f, S) {
   ctx.translate(f.x, f.y);
   if (f.facing < 0) ctx.scale(-1, 1);
   // ground shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.38)';
-  ctx.beginPath(); ctx.ellipse(w * 0.05, GROUND_Y - f.y + 3, w * 0.3, 7, 0, 0, 7); ctx.fill();
+  if (!drawImg('fx_shadow', w * 0.05, GROUND_Y - f.y + 4, w * 0.22, { alpha: 0.75 })) {
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    ctx.beginPath(); ctx.ellipse(w * 0.05, GROUND_Y - f.y + 3, w * 0.3, 7, 0, 0, 7); ctx.fill();
+  }
   // afterimages
   if (!flash && (f.state === 'walk' && b.key === 'vex' || (f.state === 'special' && f.specData && f.specData.type === 'shadowDash'))) {
     for (let i = 1; i <= 3; i++) { ctx.globalAlpha = 0.18 / i; ctx.drawImage(fr.img, -fx - i * 14, -h, w, h); }
@@ -1990,12 +1999,16 @@ function drawSpriteCat(f, S) {
   ctx.shadowBlur = 0;
   if (flash) { ctx.globalAlpha = 0.5; ctx.drawImage(whiteFrame(fr), -fx, -h, w, h); ctx.globalAlpha = 1; }
   if (active && !flash) {
-    ctx.save();
-    ctx.strokeStyle = b.specColor; ctx.shadowColor = b.specColor; ctx.shadowBlur = 14;
-    ctx.lineWidth = f.state === 'heavy' ? 6 : 4; ctx.lineCap = 'round'; ctx.globalAlpha = 0.75;
     const sy0 = f.atkKind === 'crouch' ? -h * 0.22 : -h * 0.55;
-    ctx.beginPath(); ctx.arc(w * 0.3, sy0, h * (f.state === 'heavy' ? 0.42 : 0.34), -1.0, 0.45); ctx.stroke();
-    ctx.restore();
+    const swipeKey = f.state === 'heavy' ? 'fx_swipe_heavy' : 'fx_swipe_light';
+    const k = (sf - atk.su) / Math.max(1, atk.ac);
+    if (!drawImg(swipeKey, w * 0.55, sy0, h * (f.state === 'heavy' ? 0.95 : 0.7) * (0.85 + k * 0.3), { add: true, alpha: 0.95 - k * 0.4, rot: f.atkKind === 'air' ? 0.5 : 0 })) {
+      ctx.save();
+      ctx.strokeStyle = b.specColor; ctx.shadowColor = b.specColor; ctx.shadowBlur = 14;
+      ctx.lineWidth = f.state === 'heavy' ? 6 : 4; ctx.lineCap = 'round'; ctx.globalAlpha = 0.75;
+      ctx.beginPath(); ctx.arc(w * 0.3, sy0, h * (f.state === 'heavy' ? 0.42 : 0.34), -1.0, 0.45); ctx.stroke();
+      ctx.restore();
+    }
   }
   if (f.state === 'special' && f.specActive && f.specData) { ctx.save(); ctx.scale(ART, ART); drawSpecialEffect(f); ctx.restore(); }
   ctx.restore();
@@ -2005,6 +2018,7 @@ function drawSpecialEffect(f) {
   const d = f.specData;
   const b = f.breed, c = b.color;
   if (d.type === 'shadowDash') {
+    if (img('fx_dash_streak')) { drawImg('fx_dash_streak', -46, -46, 62, { add: true, alpha: Math.min(1, d.timer / 10) }); return; }
     for (let i = 1; i <= 4; i++) {
       ctx.globalAlpha = 0.35 / i;
       ctx.fillStyle = i % 2 ? c.eye : '#0A0612';
@@ -2014,6 +2028,9 @@ function drawSpecialEffect(f) {
       ctx.beginPath(); ctx.arc(-i * 16 + 4, -72, b.headR, 0, 7); ctx.fill();
     }
     ctx.globalAlpha = 1;
+  } else if (d.type === 'earthquake' && f.stateFrame >= 6 && f.stateFrame <= 24 && img('fx_shockwave')) {
+    const k = (f.stateFrame - 6) / 18;
+    drawImg('fx_shockwave', 0, 6, 34 + k * 56, { add: true, alpha: 1 - k * k });
   } else if (d.type === 'earthquake' && f.stateFrame >= 6 && f.stateFrame <= 15) {
     ctx.strokeStyle = b.specColor;
     ctx.lineWidth = 4;
@@ -2024,6 +2041,9 @@ function drawSpecialEffect(f) {
     ctx.globalAlpha = 0.3;
     ctx.beginPath(); ctx.ellipse(0, 2, r * 0.6, 5, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  } else if (d.type === 'hypnoGaze' && f.stateFrame < 26 && img('fx_hypno_1')) {
+    const k = f.stateFrame / 26;
+    drawImg('fx_hypno_' + (1 + Math.min(2, (f.stateFrame / 9) | 0)), 34 + k * 30, -66, 24 + k * 60, { add: true, alpha: 1 - k * 0.6, rot: f.stateFrame * 0.2 });
   } else if (d.type === 'hypnoGaze' && f.stateFrame < 20) {
     ctx.lineWidth = 2;
     for (let i = 0; i < 4; i++) {
