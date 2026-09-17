@@ -644,9 +644,14 @@ const UI_KEYS = ['title_logo','menu_resume','menu_controls','menu_quit','menu_re
   'pip_p1','pip_p2','pip_off','hud_special_ready','crown_p1','crown_p2','crown','skull','skull_p1','skull_p2','x_p1','x_p2','x',
   'btn_dpad_up','btn_dpad_down','btn_dpad_left','btn_dpad_right','btn_fist','btn_special','btn_block',
   'paused','mode_1p','mode_2p','mode_1p_sel','mode_2p_sel','polaroid','polaroid_p1','polaroid_p2','frame_chain','frame_pink','frame_grey','frame_cyan',
-  'header_fighter','header_ground','header_battle','header_controls'];
+  'header_fighter','header_ground','header_battle','header_controls',
+  'name_razor','name_vex','name_brutus','name_hex','stage_pit','stage_rooftop','stage_scrap','stage_temple','tag_anywhere','tag_hunger',
+  'note_yellow','note_paper','stat_bar','stat_hp','stat_atk','stat_spd','arch_power','arch_speed','arch_tank','arch_glass_cannon',
+  'level_1','level_2','level_3','level_4','best_streak'];
+loadImage('ui_bg_corkboard', 'assets/ui/bg_corkboard.jpg');
+loadImage('ui_bg_chainlink', 'assets/ui/bg_chainlink.jpg');
 for (const k of UI_KEYS) loadImage('ui_' + k, `assets/ui/${k}.png`);
-for (const k of ['round_1','round_2','round_3','fight','ko','time_up','wins','perfect','press_enter']) loadImage('ban_' + k, `assets/banners/${k}.png`);
+for (const k of ['round_1','round_2','round_3','fight','ko','time_up','wins','perfect','press_enter','the_match','final_score','win_streak']) loadImage('ban_' + k, `assets/banners/${k}.png`);
 for (const k of ['hit_1','hit_2','hit_3','hit_4','hit_5','hit_6']) loadImage('fx_' + k, `assets/fx/${k}.png`);
 // fill-channel rectangles inside the bar art, as fractions of the image
 const HUD_FILL = { p1: [0.27, 0.95, 0.31, 0.62], p2: [0.088, 0.868, 0.29, 0.63], m1: [0.10, 0.906, 0.22, 0.78], m2: [0.133, 0.80, 0.22, 0.78] };
@@ -2957,8 +2962,8 @@ function drawHUDArt() {
   drawBarArt('ui_hud_healthbar_p2', W - 14 - w2, y, w2, h2, HUD_FILL.p2, Math.max(0, f2.hp / f2.maxHp), Math.max(0, f2.displayHp / f2.maxHp), true);
 
   ctx.font = `15px ${F_SPRAY}`; ctx.fillStyle = '#F0F0F0';
-  ctx.textAlign = 'left'; ctx.fillText(f1.breed.name, 14 + w1 * 0.31, y + h1 * 0.88);
-  ctx.textAlign = 'right'; ctx.fillText(f2.breed.name, W - 14 - w2 * 0.21, y + h2 * 0.88);
+  if (!drawImg('ui_name_' + f1.breed.key, 14 + w1 * 0.44, y + h1 * 0.85, 30)) { ctx.textAlign = 'left'; ctx.fillText(f1.breed.name, 14 + w1 * 0.31, y + h1 * 0.88); }
+  if (!drawImg('ui_name_' + f2.breed.key, W - 14 - w2 * 0.40, y + h2 * 0.85, 30)) { ctx.textAlign = 'right'; ctx.fillText(f2.breed.name, W - 14 - w2 * 0.21, y + h2 * 0.88); }
   ctx.font = `bold 11px ${F_MONO}`; ctx.fillStyle = '#FFFFFF';
   ctx.textAlign = 'left'; ctx.fillText(`${Math.ceil(f1.hp)}`, 14 + w1 * 0.285, y + h1 * 0.50);
   ctx.textAlign = 'right'; ctx.fillText(`${Math.ceil(f2.hp)}`, W - 14 - w2 * 0.145, y + h2 * 0.50);
@@ -3112,6 +3117,17 @@ function titlePatch() {
 
 let corkLayer = null;
 function drawCorkboard() {
+  const bg = img('ui_bg_corkboard');
+  if (bg) {
+    ctx.drawImage(bg, 0, 0, W, H);
+    ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(0, 0, W, H);
+    drawImg('ui_note_paper', 118, 92, 74, { rot: -0.08 });
+    scratchText('NO GODS', 118, 88, 12, '#3A2A1A', { rotate: -0.08 }); scratchText('NO LEASH', 118, 103, 12, '#3A2A1A', { rotate: -0.08 });
+    drawImg('ui_note_yellow', 880, 468, 84, { rot: 0.1 });
+    scratchText('CATS', 880, 455, 15, '#1A1612', { rotate: 0.1 }); scratchText('FIGHT', 880, 472, 15, '#1A1612', { rotate: 0.1 }); scratchText('CATS.', 880, 489, 15, '#1A1612', { rotate: 0.1 });
+    drawImg('ui_tag_hunger', 175, 492, 56, { rot: -0.04 });
+    return;
+  }
   if (!corkLayer) {
     corkLayer = makeLayer();
     withCtx(corkLayer.getContext('2d'), () => {
@@ -3197,7 +3213,10 @@ function drawTitle() {
   }
 
   const hs = loadHighScore();
-  if (hs > 0) {
+  if (hs > 0 && img('ui_best_streak')) {
+    drawImg('ui_best_streak', W - 150, H - 40, 56);
+    drawDigits(hs, W - 66, H - 40, 26, 2);
+  } else if (hs > 0) {
     scratchText('BEST STREAK:', W - 150, H - 62, 13, '#B8B8B8', { align: 'left' });
     ctx.strokeStyle = '#D8D8D8'; ctx.lineWidth = 2; ctx.lineCap = 'round';
     let tx = W - 150;
@@ -3267,7 +3286,7 @@ function drawModeSelect() {
     }
   }
 
-  scratchText('FIGHT ANYWHERE / FIGHT EVERYONE', W / 2, H - 64, 15, P.p1);
+  if (!drawImg('ui_tag_anywhere', W / 2, H - 80, 82)) scratchText('FIGHT ANYWHERE / FIGHT EVERYONE', W / 2, H - 64, 15, P.p1);
   ctx.font = `13px ${F_MONO}`; ctx.textAlign = 'center'; ctx.fillStyle = '#6A6A6A';
   ctx.fillText('A/D or ←/→ to select, ENTER to confirm', W / 2, H - 38);
 }
@@ -3320,7 +3339,7 @@ function drawCharSelect() {
       ctx.save(); ctx.translate(62, -95); ctx.rotate(0.65); ctx.fillRect(-18, -6, 36, 12); ctx.restore();
     }
     scratchText(b.name, 0, hasFrame ? 76 : 68, 24, '#1A1612', { skew: -0.12 });
-    scratchText(b.arch, 0, hasFrame ? 93 : 86, 11, hasFrame ? '#3A3230' : '#6A6058', { skew: 0 });
+    if (!drawImg('ui_arch_' + b.arch.toLowerCase().replace(' ', '_'), 0, hasFrame ? 93 : 86, 30)) scratchText(b.arch, 0, hasFrame ? 93 : 86, 11, hasFrame ? '#3A3230' : '#6A6058', { skew: 0 });
     if (!sel) { ctx.fillStyle = 'rgba(30,20,10,0.4)'; ctx.fillRect(-75, -100, 150, 200); }
     ctx.restore();
     if (!hasFrame) drawPushpin(cx, cy + oy - 95 * sc + 6, sel1 ? P.p1 : sel2 ? P.p2 : '#8A8A8A');
@@ -3333,12 +3352,21 @@ function drawCharSelect() {
   for (const [idx, colr, tag, px] of picks) {
     const b = BREEDS[BREED_KEYS[idx]];
     const stats = [['HP', b.hp / 140], ['ATK', b.hAtk.dmg / 26], ['SPD', b.speed / 6]];
-    scratchText(tag + ' · ' + b.title, px, 452, 13, colr, { align: 'left' });
+    scratchText(tag + ' · ' + b.title, px, 442, 13, colr, { align: 'left' });
     for (let s = 0; s < 3; s++) {
-      const sy = 462 + s * 13;
-      ctx.font = `bold 9px ${F_MONO}`; ctx.textAlign = 'left'; ctx.fillStyle = '#B8A080'; ctx.fillText(stats[s][0], px, sy + 8);
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(px + 30, sy, 100, 7);
-      ctx.fillStyle = colr; ctx.fillRect(px + 30, sy, 100 * stats[s][1], 7);
+      const sy = 452 + s * 20;
+      if (img('ui_stat_bar')) {
+        drawImg('ui_stat_' + stats[s][0].toLowerCase(), px + 16, sy + 8, 17);
+        const bim = img('ui_stat_bar'), bw = 120, bh = bw * bim.height / bim.width;
+        ctx.drawImage(bim, px + 36, sy + 8 - bh / 2, bw, bh);
+        ctx.fillStyle = colr; ctx.globalAlpha = 0.9;
+        ctx.fillRect(px + 36 + bw * 0.07, sy + 8 - bh * 0.22, bw * 0.86 * stats[s][1], bh * 0.44);
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.font = `bold 9px ${F_MONO}`; ctx.textAlign = 'left'; ctx.fillStyle = '#B8A080'; ctx.fillText(stats[s][0], px, sy + 8);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(px + 30, sy, 100, 7);
+        ctx.fillStyle = colr; ctx.fillRect(px + 30, sy, 100 * stats[s][1], 7);
+      }
     }
   }
 
@@ -3347,8 +3375,9 @@ function drawCharSelect() {
 }
 
 function drawStageSelect() {
-  ctx.fillStyle = '#0A0A0E'; ctx.fillRect(0, 0, W, H);
-  drawChainLink(0, 0, W, H, 26, '#5A5A62', 0.22);
+  const sbg = img('ui_bg_chainlink');
+  if (sbg) { ctx.drawImage(sbg, 0, 0, W, H); ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, 0, W, H); }
+  else { ctx.fillStyle = '#0A0A0E'; ctx.fillRect(0, 0, W, H); drawChainLink(0, 0, W, H, 26, '#5A5A62', 0.22); }
   const st = STAGES[game.stageSelect];
   glowBlob(W / 2, 260, 420, st.accent, 0.08);
   if (!drawImg('ui_header_ground', W / 2, 52, 68, { glow: P.p1, blur: 16 })) sprayText('PICK YOUR GROUND', W / 2, 66, 46, P.gold, { seed: 12, outline: '#1A1004' });
@@ -3379,9 +3408,9 @@ function drawStageSelect() {
     }
     if (!sel) { ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(...tb); }
     if (!img(frameKey)) { ctx.strokeStyle = sel ? s.accent : '#2A2A30'; ctx.lineWidth = 3; ctx.strokeRect(-100, -66, 200, 112); }
-    sprayText(s.name, 0, 84, s.name.length > 13 ? 16 : 22, s.accent, { seed: 20 + i, drips: false, outline: '#0A0608' });
+    if (!drawImg('ui_stage_' + s.id, 0, 82, 44)) sprayText(s.name, 0, 84, s.name.length > 13 ? 16 : 22, s.accent, { seed: 20 + i, drips: false, outline: '#0A0608' });
     scratchText(s.sub, 0, 104, 10, '#9A9A9A');
-    scratchText('LEVEL ' + (i + 1), -86, -100, 12, s.accent, { align: 'left' });
+    if (!drawImg('ui_level_' + (i + 1), -62, -104, 30)) scratchText('LEVEL ' + (i + 1), -86, -100, 12, s.accent, { align: 'left' });
     if (sel) drawSafetyPin(82, -98, 0.5, '#C0C0C8');
     ctx.restore();
   }
@@ -3786,7 +3815,7 @@ function drawRoundIntro() {
       ctx.restore();
     }
   } else {
-    scratchText(st.name, W/2, H/2 - 84, 22, st.accent, { underline: true });
+    if (!drawImg('ui_stage_' + st.id, W/2, H/2 - 92, 48)) scratchText(st.name, W/2, H/2 - 84, 22, st.accent, { underline: true });
     const pop = 1 + Math.max(0, game.introTimer - 78) * 0.04;
     if (!drawImg('ban_round_' + game.round, W/2, H/2 - 10, 104, { scale: pop, glow: P.p1, blur: 22 })) {
       sprayText(game.introText, W/2, H/2 + 4, 84, P.gold, { glow: 16, seed: 15, outline: '#141004' });
@@ -3829,10 +3858,12 @@ function drawMatchEnd() {
   drawImg(game.matchWinner === 1 ? 'ui_crown_p1' : 'ui_crown_p2', tx, H/2 - 118, 40, { glow: col, blur: 14 });
   sprayText(winner.breed.name, tx, H/2 - 56, 74, col, { glow: 22, seed: 17, outline: '#0A0608' });
   if (!drawImg('ban_wins', tx, H/2 + 4, 80, { glow: P.gold, blur: 16 })) sprayText('WINS', tx, H/2 + 10, 56, P.gold, { glow: 14, seed: 24, outline: '#141004' });
-  scratchText('THE MATCH', tx, H/2 + 56, 22, '#E0E0E0');
-  scratchText(`Final Score  ${game.f1.wins} - ${game.f2.wins}`, tx, H/2 + 82, 16, '#C8C8C8');
+  if (!drawImg('ban_the_match', tx, H/2 + 58, 40)) scratchText('THE MATCH', tx, H/2 + 56, 22, '#E0E0E0');
+  if (img('ban_final_score')) { drawImg('ban_final_score', tx - 60, H/2 + 100, 34); drawDigits(game.f1.wins, tx + 42, H/2 + 100, 26, 2); scratchText('-', tx + 62, H/2 + 108, 20, '#C8C8C8'); drawDigits(game.f2.wins, tx + 82, H/2 + 100, 26, 2); }
+  else scratchText(`Final Score  ${game.f1.wins} - ${game.f2.wins}`, tx, H/2 + 82, 16, '#C8C8C8');
   if (game.vsAI && game.matchWinner === 1) {
-    scratchText(`Win Streak: ${game.winStreak}`, tx, H/2 + 104, 16, P.gold);
+    if (img('ban_win_streak')) { drawImg('ban_win_streak', tx - 50, H/2 + 138, 34); drawDigits(game.winStreak, tx + 60, H/2 + 138, 26, 2); }
+    else scratchText(`Win Streak: ${game.winStreak}`, tx, H/2 + 104, 16, P.gold);
   }
   if (game.introTimer < 140 && Math.floor(game.frame / 25) % 2 === 0) {
     if (!drawImg('ban_press_enter', W/2, H - 44, 44, { dx: (Math.random() - 0.5) * 3 })) sprayText('PRESS ENTER', W/2, H/2 + 104, 26, '#F4F4F4', { jitter: 2, seed: 19, drips: false, outline: '#0A0608' });
