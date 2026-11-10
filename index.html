@@ -44,6 +44,8 @@ const BLOCK_KB = 0.25;              // knockback multiplier when blocking
 const PARTICLE_CAP = 120;           // max particles on screen
 const AI_BASE_REACT = 14;           // AI base reaction time (frames)
 const AI_AGGRO = 0.55;              // AI aggression factor
+const MASTER_VOL = 0.8;             // overall sound volume
+const MAX_RENDER_SCALE = 2;         // cap on internal resolution (x 960x540)
 const ART = 2.18;                   // fighter body scale (collision + canvas cats)
 const MOVE_SCALE = 1.3;             // walk speed multiplier for the larger fighters
 const JUMP_SCALE = 1.2;             // jump velocity multiplier for the larger fighters
@@ -54,20 +56,49 @@ const JUMP_SCALE = 1.2;             // jump velocity multiplier for the larger f
 
 const canvas = document.getElementById('c');
 let ctx = canvas.getContext('2d');
-canvas.width = W; canvas.height = H;
+let RS = 1;   // render scale: backing-store pixels per game unit
+
+// shadowBlur ignores the canvas transform, so scale it with the render scale
+const sbDesc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'shadowBlur');
+Object.defineProperty(ctx, 'shadowBlur', { get() { return sbDesc.get.call(this) / RS; }, set(v) { sbDesc.set.call(this, v * RS); } });
 
 function resize() {
   const s = Math.min(innerWidth / W, innerHeight / H);
   canvas.style.width = (W * s) + 'px';
   canvas.style.height = (H * s) + 'px';
+  const pw = Math.round(W * Math.min(MAX_RENDER_SCALE, Math.max(1, s * (window.devicePixelRatio || 1))));
+  if (canvas.width !== pw) { canvas.width = pw; canvas.height = Math.round(pw * H / W); }
+  RS = canvas.width / W;
 }
 resize();
 addEventListener('resize', resize);
 
-let audioCtx = null;
+let audioCtx = null, masterGain = null;
+let muted = false;
+try { muted = localStorage.getItem('catfighter_muted') === '1'; } catch (e) {}
 function ensureAudio() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = muted ? 0 : MASTER_VOL;
+    const comp = audioCtx.createDynamicsCompressor();
+    masterGain.connect(comp); comp.connect(audioCtx.destination);
+    for (const n in sndRaw) decodeSound(n);
+  }
   if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+function toggleMute() {
+  muted = !muted;
+  if (masterGain) masterGain.gain.value = muted ? 0 : MASTER_VOL;
+  try { localStorage.setItem('catfighter_muted', muted ? '1' : '0'); } catch (e) {}
+}
+
+// asset load tracking for the loading screen
+const loadState = { total: 0, done: 0 };
+function trackLoad() {
+  loadState.total++;
+  let fin = false;
+  return () => { if (!fin) { fin = true; loadState.done++; } };
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -305,6 +336,46 @@ function hexAlpha(hex, a) {
 //  Sound Engine (Web Audio API)
 // ═══════════════════════════════════════════════════════════════════
 
+// recorded clips (assets/sfx, see CREDITS.md there); the synth below is the fallback
+const SND_NAMES = ['punch_1','punch_2','punch_3','hit_1','hit_2','hit_3','ko','block_1','block_2','land',
+  'swish_1','swish_2','swish_3','swoosh_1','swoosh_2','jump','bell','ding','gong',
+  'growl_1','growl_2','growl_3','growl_4','meow','mew','magic','spell','quake','boom',
+  'ui_move','ui_select','ui_back','ui_pause','tick','crowd','applause'];
+const SND = {}, sndRaw = {};
+
+function decodeSound(name) {
+  const raw = sndRaw[name];
+  delete sndRaw[name];
+  audioCtx.decodeAudioData(raw, buf => { SND[name] = buf; }, () => {});
+}
+function loadSounds() {
+  if (location.protocol === 'file:') return;   // fetch can't read local files; the synth plays instead
+  for (const name of SND_NAMES) {
+    const done = trackLoad();
+    fetch(`assets/sfx/${name}.mp3`)
+      .then(r => r.ok ? r.arrayBuffer() : null)
+      .then(buf => { if (buf) { sndRaw[name] = buf; if (audioCtx) decodeSound(name); } })
+      .catch(() => {})
+      .then(done);
+  }
+}
+loadSounds();
+
+// o: vol, rate (pitch), vary (random pitch spread), delay (seconds)
+function playSnd(name, o = {}) {
+  const buf = SND[name];
+  if (!buf || !audioCtx) return false;
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = (o.rate || 1) * (1 + (Math.random() - 0.5) * (o.vary || 0));
+  const gain = audioCtx.createGain();
+  gain.gain.value = o.vol == null ? 1 : o.vol;
+  src.connect(gain); gain.connect(masterGain);
+  src.start(audioCtx.currentTime + (o.delay || 0));
+  return true;
+}
+function pick(base, n) { return base + '_' + (1 + Math.floor(Math.random() * n)); }
+
 let noiseBuffer = null;
 function getNoiseBuffer() {
   if (noiseBuffer) return noiseBuffer;
@@ -326,7 +397,7 @@ function playNoise(freq, dur, vol, q) {
   const t = audioCtx.currentTime;
   gain.gain.setValueAtTime(vol, t);
   gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  src.connect(filt).connect(gain).connect(audioCtx.destination);
+  src.connect(filt); filt.connect(gain); gain.connect(masterGain);
   src.start(t); src.stop(t + dur);
 }
 
@@ -340,22 +411,61 @@ function playTone(freq, dur, vol, type, slide) {
   const gain = audioCtx.createGain();
   gain.gain.setValueAtTime(vol, t);
   gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  osc.connect(gain).connect(audioCtx.destination);
+  osc.connect(gain); gain.connect(masterGain);
   osc.start(t); osc.stop(t + dur);
 }
 
+// f = the fighter making the sound; its breed.voice pitches the cat noises
 const SFX = {
-  hitLight()  { playNoise(900, 0.08, 0.35, 3); playTone(300, 0.06, 0.15, 'square'); },
-  hitHeavy()  { playNoise(500, 0.15, 0.45, 2); playTone(150, 0.12, 0.2, 'sawtooth'); },
-  block()     { playTone(1200, 0.05, 0.2, 'square'); playTone(800, 0.04, 0.15, 'sine'); },
-  jump()      { playTone(400, 0.1, 0.12, 'sine', 800); },
-  land()      { playNoise(200, 0.06, 0.15, 1); },
-  special()   { playTone(500, 0.3, 0.2, 'sawtooth', 1200); playTone(700, 0.3, 0.15, 'sine', 1400); },
-  ko()        { playTone(600, 0.5, 0.3, 'sawtooth', 80); playNoise(300, 0.4, 0.25, 1); },
-  bell()      { playTone(800, 0.6, 0.2, 'sine'); playTone(1200, 0.4, 0.1, 'sine'); },
-  select()    { playTone(660, 0.08, 0.15, 'square'); },
-  move()      { playTone(440, 0.04, 0.08, 'square'); },
-  win()       { playTone(523, 0.15, 0.2, 'square'); setTimeout(()=>playTone(659,0.15,0.2,'square'),150); setTimeout(()=>playTone(784,0.3,0.25,'square'),300); },
+  swing(heavy) {
+    if (heavy) playSnd(pick('swoosh', 2), { vol: 0.7, vary: 0.2 });
+    else playSnd(pick('swish', 3), { vol: 0.55, vary: 0.25 });
+  },
+  hitLight() {
+    if (!playSnd(pick('punch', 3), { vol: 0.9, vary: 0.16 })) { playNoise(900, 0.08, 0.35, 3); playTone(300, 0.06, 0.15, 'square'); }
+  },
+  hitHeavy(f) {
+    if (!playSnd(pick('hit', 3), { vary: 0.12 })) { playNoise(500, 0.15, 0.45, 2); playTone(150, 0.12, 0.2, 'sawtooth'); return; }
+    if (f && Math.random() < 0.6) playSnd(pick('growl', 4), { vol: 0.5, rate: f.breed.voice, vary: 0.1, delay: 0.05 });
+  },
+  block() {
+    if (!playSnd(pick('block', 2), { vol: 0.8, vary: 0.2 })) { playTone(1200, 0.05, 0.2, 'square'); playTone(800, 0.04, 0.15, 'sine'); }
+  },
+  jump() { if (!playSnd('jump', { vol: 0.45, vary: 0.2 })) playTone(400, 0.1, 0.12, 'sine', 800); },
+  land() { if (!playSnd('land', { vol: 0.5, vary: 0.2 })) playNoise(200, 0.06, 0.15, 1); },
+  special(f) {
+    const voice = f.breed.voice;
+    let ok;
+    switch (f.breed.specType) {
+      case 'furball':    ok = playSnd(pick('growl', 4), { vol: 0.8, rate: voice }); playSnd('swoosh_1', { vol: 0.8, rate: 0.7, delay: 0.05 }); break;
+      case 'shadowDash': ok = playSnd('swoosh_2', { rate: 0.45 }); playSnd('magic', { vol: 0.35, rate: 1.4 }); break;
+      case 'earthquake': ok = playSnd(pick('growl', 4), { rate: voice }); break;
+      case 'hypnoGaze':  ok = playSnd('spell', { vol: 0.8, rate: 1.3 }); playSnd('magic', { vol: 0.5 }); break;
+    }
+    if (!ok) { playTone(500, 0.3, 0.2, 'sawtooth', 1200); playTone(700, 0.3, 0.15, 'sine', 1400); }
+  },
+  quake() { if (playSnd('quake')) playSnd('boom', { vol: 0.8, rate: 0.7 }); else playNoise(120, 0.3, 0.5, 1); },
+  ko(f) {
+    if (!playSnd('ko')) { playTone(600, 0.5, 0.3, 'sawtooth', 80); playNoise(300, 0.4, 0.25, 1); return; }
+    playSnd('meow', { vol: 0.8, rate: f.breed.voice * 0.6, delay: 0.1 });
+    playSnd('crowd', { vol: 0.7, delay: 0.2 });
+  },
+  bell()  { if (!playSnd('bell', { vol: 0.8 })) { playTone(800, 0.6, 0.2, 'sine'); playTone(1200, 0.4, 0.1, 'sine'); } },
+  fight() { if (!playSnd('gong', { vol: 0.9 })) { playTone(660, 0.5, 0.2, 'sine'); playTone(990, 0.4, 0.12, 'sine'); } },
+  ready() { playSnd('ding', { vol: 0.5 }); },
+  tick()  { if (!playSnd('tick', { vol: 0.7 })) playTone(1000, 0.03, 0.06, 'square'); },
+  select() { if (!playSnd('ui_select', { vol: 0.5 })) playTone(660, 0.08, 0.15, 'square'); },
+  move()   { if (!playSnd('ui_move', { vol: 0.6 })) playTone(440, 0.04, 0.08, 'square'); },
+  back()   { if (!playSnd('ui_back', { vol: 0.7 })) playTone(330, 0.05, 0.08, 'square'); },
+  pause()  { if (!playSnd('ui_pause', { vol: 0.7 })) playTone(520, 0.08, 0.15, 'square'); },
+  meow(breed) {   // the small, high-voiced cats get the kitten clip
+    if (breed.voice > 1.1) playSnd('mew', { vol: 0.75, rate: breed.voice * 0.75, vary: 0.06 });
+    else playSnd('meow', { vol: 0.7, rate: breed.voice, vary: 0.06 });
+  },
+  win(f) {
+    if (!playSnd('applause')) { playTone(523, 0.15, 0.2, 'square'); setTimeout(() => playTone(659, 0.15, 0.2, 'square'), 150); setTimeout(() => playTone(784, 0.3, 0.25, 'square'), 300); return; }
+    playSnd('meow', { vol: 0.8, rate: f.breed.voice, delay: 0.3 });
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -436,9 +546,16 @@ addEventListener('keydown', e => {
   if (!keys[e.code]) justPressed[e.code] = true;
   keys[e.code] = true;
   ensureAudio();
-  e.preventDefault();
+  if (e.code === 'KeyM' && !e.repeat && !game.controlsWaiting && !keyIsBound('KeyM')) toggleMute();
+  // keep browser shortcuts (Ctrl+R, F5, F12...) working
+  const shortcut = (e.ctrlKey || e.metaKey) && !/^(Control|Meta)/.test(e.code);
+  if (!shortcut && !/^F\d+$/.test(e.code)) e.preventDefault();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && game.state === 'fighting') { game.state = 'paused'; game.pauseMenu = 0; }
+});
 
 function wasPressed(code) { return !!justPressed[code]; }
 function isDown(code) { return !!keys[code]; }
@@ -464,6 +581,9 @@ function loadBindings() {
     }
   } catch(e) {}
   return JSON.parse(JSON.stringify(DEFAULT_BINDINGS));
+}
+function keyIsBound(code) {
+  return ['p1', 'p2'].some(pl => Object.values(bindings[pl]).includes(code));
 }
 function saveBindings() {
   try { localStorage.setItem('catfighter_bindings', JSON.stringify(bindings)); } catch(e) {}
@@ -526,6 +646,18 @@ const TBTN = [
   { id:'pause',  x:W/2+98, y:30,  r:18, label:'II' },
 ];
 
+function btnActive(btn) {
+  const s = game.state;
+  if (btn.id === 'pause') return s === 'fighting' || s === 'roundIntro' || s === 'paused';
+  if (btn.id === 'confirm') return s === 'modeSelect' || s === 'charSelect' || s === 'stageSelect';
+  return s === 'fighting' || s === 'roundIntro';
+}
+function btnHit(btn, x, y) { return btnActive(btn) && Math.hypot(x - btn.x, y - btn.y) < btn.r * 1.3; }
+function canvasPos(p) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: (p.clientX - rect.left) / rect.width * W, y: (p.clientY - rect.top) / rect.height * H };
+}
+
 function handleTouches(e) {
   e.preventDefault();
   ensureAudio();
@@ -533,21 +665,17 @@ function handleTouches(e) {
   const prev = {};
   for (const k in touchJust) prev[k] = touch[k];
   for (const k in touch) touch[k] = false;
-  const rect = canvas.getBoundingClientRect();
   if (e.type === 'touchstart') {
     for (const t of e.changedTouches) {
-      const tx = (t.clientX - rect.left) / rect.width * W, ty = (t.clientY - rect.top) / rect.height * H;
-      if (!TBTN.some(btn => Math.hypot(tx - btn.x, ty - btn.y) < btn.r * 1.3)) tapPos = { x: tx, y: ty };
+      const pos = canvasPos(t);
+      if (!TBTN.some(btn => btnHit(btn, pos.x, pos.y))) tapPos = pos;
     }
   }
   for (const t of e.touches) {
-    const tx = (t.clientX - rect.left) / rect.width * W;
-    const ty = (t.clientY - rect.top) / rect.height * H;
+    const pos = canvasPos(t);
     touch.any = true;
     for (const btn of TBTN) {
-      if (Math.hypot(tx - btn.x, ty - btn.y) < btn.r * 1.3) {
-        touch[btn.id] = true;
-      }
+      if (btnHit(btn, pos.x, pos.y)) touch[btn.id] = true;
     }
   }
   for (const k in touchJust) {
@@ -558,14 +686,17 @@ canvas.addEventListener('touchstart', handleTouches, {passive:false});
 canvas.addEventListener('touchmove', handleTouches, {passive:false});
 canvas.addEventListener('touchend', handleTouches, {passive:false});
 canvas.addEventListener('touchcancel', handleTouches, {passive:false});
+canvas.addEventListener('mousedown', e => {
+  ensureAudio();
+  tapPos = canvasPos(e);
+  touchJust.any = true;
+});
 
 function drawTouchUI() {
   if (!touchActive) return;
   const TOUCH_IMG = { left: 'btn_dpad_right', right: 'btn_dpad_right', up: 'btn_dpad_up', down: 'btn_dpad_down', light: 'btn_fist', heavy: 'btn_fist', special: 'btn_special', block: 'btn_block', confirm: 'btn_confirm', pause: 'btn_pause' };
-  const inFight = game.state === 'fighting' || game.state === 'roundIntro' || game.state === 'paused';
   for (const btn of TBTN) {
-    if (btn.id === 'pause' && !inFight) continue;
-    if (btn.id === 'confirm' && game.state === 'fighting') continue;
+    if (!btnActive(btn)) continue;
     const pressed = touch[btn.id];
     const heavyPulse = btn.id === 'heavy' ? 22 + Math.sin(game.frame * 0.15) * 8 : 0;
     if (drawImg('ui_' + TOUCH_IMG[btn.id], btn.x, btn.y, btn.r * 2.2, { alpha: pressed ? 1 : 0.8, scale: pressed ? 1.12 : 1, flip: btn.id === 'left', glow: heavyPulse ? P.p1 : null, blur: heavyPulse })) continue;
@@ -607,26 +738,29 @@ const ASSETS = { images: {}, sprites: {} };
 const FIGHTER_KEYS = ['razor', 'vex', 'brutus', 'hex'];
 
 function loadImage(key, src) {
-  const im = new Image();
-  im.onload = () => { ASSETS.images[key] = im; };
+  const im = new Image(), done = trackLoad();
+  im.onload = () => { ASSETS.images[key] = im; done(); };
+  im.onerror = done;
   im.src = src;
 }
 function img(key) { return ASSETS.images[key] || null; }
 
 function loadSprites(key) {
-  const s = document.createElement('script');
+  const s = document.createElement('script'), manifestDone = trackLoad();
   s.src = `assets/fighters/${key}/manifest.js`;
+  s.onerror = manifestDone;
   s.onload = () => {
     const man = SPRITE_MANIFEST[key];
-    if (!man) return;
+    if (!man) { manifestDone(); return; }
     const set = { frames: {}, ready: false, count: 0, total: Object.keys(man).length };
     for (const name in man) {
-      const im = new Image();
-      im.onload = () => { set.frames[name] = { img: im, w: man[name].w, h: man[name].h, fx: man[name].fx, white: null }; set.count++; if (set.count >= set.total) set.ready = true; };
-      im.onerror = () => { set.total--; if (set.count >= set.total) set.ready = true; };
+      const im = new Image(), done = trackLoad();
+      im.onload = () => { set.frames[name] = { img: im, w: man[name].w, h: man[name].h, fx: man[name].fx, white: null }; set.count++; if (set.count >= set.total) set.ready = true; done(); };
+      im.onerror = () => { set.total--; if (set.count >= set.total) set.ready = true; done(); };
       im.src = `assets/fighters/${key}/${name}.png`;
     }
     ASSETS.sprites[key] = set;
+    manifestDone();
   };
   document.head.appendChild(s);
 }
@@ -652,7 +786,7 @@ loadImage('ui_bg_corkboard', 'assets/ui/bg_corkboard.jpg');
 loadImage('ui_bg_chainlink', 'assets/ui/bg_chainlink.jpg');
 for (const k of UI_KEYS) loadImage('ui_' + k, `assets/ui/${k}.png`);
 for (const k of ['round_1','round_2','round_3','fight','ko','time_up','wins','perfect','press_enter','the_match','final_score','win_streak']) loadImage('ban_' + k, `assets/banners/${k}.png`);
-for (const k of ['hit_1','hit_2','hit_3','hit_4','hit_5','hit_6','furball_1','furball_2','furball_3','shockwave','hypno_1','hypno_2','hypno_3','dash_streak','swipe_light','swipe_heavy','shadow','dust_1','dust_2','dust_3','ko_burst']) loadImage('fx_' + k, `assets/fx/${k}.png`);
+for (const k of ['hit_5','hit_block','furball_1','furball_2','furball_3','shockwave','hypno_1','hypno_2','hypno_3','dash_streak','swipe_light','swipe_heavy','shadow','dust_1','dust_2','dust_3','ko_burst']) loadImage('fx_' + k, `assets/fx/${k}.png`);
 // fill-channel rectangles inside the bar art, as fractions of the image
 const HUD_FILL = { p1: [0.27, 0.95, 0.31, 0.62], p2: [0.088, 0.868, 0.29, 0.63], m1: [0.10, 0.906, 0.22, 0.78], m2: [0.133, 0.80, 0.22, 0.78] };
 
@@ -726,7 +860,7 @@ const BREEDS = {
     hp: 120, speed: 2.8, jumpF: -10.5, weight: 1.15,
     lAtk: { su:5, ac:3, re:8, dmg:10, kb:5, rx:48, ry:28 },
     hAtk: { su:9, ac:4, re:14, dmg:20, kb:10, rx:58, ry:34 },
-    specType: 'furball', specDmg: 18, specColor: '#B8FF00', spriteH: 218,
+    specType: 'furball', specDmg: 18, specColor: '#B8FF00', spriteH: 218, voice: 0.85,
   },
   siamese: {
     key: 'vex', name: 'VEX', title: 'The Stiletto', arch: 'SPEED',
@@ -739,7 +873,7 @@ const BREEDS = {
     hp: 90, speed: 5.5, jumpF: -12.5, weight: 0.85,
     lAtk: { su:2, ac:3, re:5, dmg:7, kb:3, rx:42, ry:26 },
     hAtk: { su:5, ac:4, re:9, dmg:14, kb:7, rx:52, ry:30 },
-    specType: 'shadowDash', specDmg: 22, specColor: '#FF0066', spriteH: 228,
+    specType: 'shadowDash', specDmg: 22, specColor: '#FF0066', spriteH: 228, voice: 1.25,
   },
   maineCoon: {
     key: 'brutus', name: 'BRUTUS', title: 'The Wrecking Ball', arch: 'TANK',
@@ -752,7 +886,7 @@ const BREEDS = {
     hp: 140, speed: 2.2, jumpF: -10, weight: 1.35,
     lAtk: { su:6, ac:4, re:10, dmg:12, kb:7, rx:55, ry:32 },
     hAtk: { su:10, ac:5, re:16, dmg:26, kb:15, rx:65, ry:38 },
-    specType: 'earthquake', specDmg: 30, specColor: '#FF6600', spriteH: 248,
+    specType: 'earthquake', specDmg: 30, specColor: '#FF6600', spriteH: 248, voice: 0.65,
   },
   sphynx: {
     key: 'hex', name: 'HEX', title: 'The Glitch', arch: 'GLASS CANNON',
@@ -765,7 +899,7 @@ const BREEDS = {
     hp: 85, speed: 6, jumpF: -13, weight: 0.75,
     lAtk: { su:2, ac:2, re:4, dmg:8, kb:3, rx:40, ry:24 },
     hAtk: { su:4, ac:3, re:7, dmg:16, kb:9, rx:50, ry:28 },
-    specType: 'hypnoGaze', specDmg: 12, specColor: '#FF00FF', spriteH: 222,
+    specType: 'hypnoGaze', specDmg: 12, specColor: '#FF00FF', spriteH: 222, voice: 1.5,
   },
 };
 
@@ -795,7 +929,7 @@ function createFighter(breedKey, startX, facing) {
     // special move projectile/state
     specActive: false, specData: null,
     currentInput: { left:false, right:false, up:false, down:false, light:false, heavy:false, special:false, block:false },
-    winPose: false, atkKind: 'stand',
+    winPose: false, atkKind: 'stand', airAtk: false,
   };
 }
 
@@ -851,7 +985,9 @@ function updateFighter(f, input, opp) {
       f.y = GROUND_Y;
       f.vy = 0;
       f.grounded = true;
+      f.airAtk = false;
       spawnHitFx('fx_dust_1', f.x, f.y - 8, 110, 16, { add: false, rot: 0, spin: 0, grow: 0.6, dy: -10 });
+      SFX.land();
       if (f.state === 'airborne' || f.state === 'jump') {
         f.state = 'idle'; f.stateFrame = 0;
       }
@@ -898,7 +1034,8 @@ function updateFighter(f, input, opp) {
     f.x += f.vx;
     if (f.atkKind === 'air' && f.grounded) { f.state = 'idle'; f.stateFrame = 0; f.hitThisAtk = false; f.atkKind = 'stand'; }
     else if (f.stateFrame >= totalAtkFrames(atk)) {
-      f.state = f.atkKind === 'crouch' && input.down ? 'crouch' : 'idle'; f.stateFrame = 0;
+      f.state = !f.grounded ? 'jump' : f.atkKind === 'crouch' && input.down ? 'crouch' : 'idle';
+      f.stateFrame = 0;
       f.hitThisAtk = false; f.atkKind = 'stand';
     }
     clampStage(f);
@@ -945,6 +1082,7 @@ function updateFighter(f, input, opp) {
     // crouching attacks
     if (f.state === 'crouch' && (input.light || input.heavy)) {
       f.state = input.heavy ? 'heavy' : 'light'; f.stateFrame = 0; f.hitThisAtk = false; f.atkKind = 'crouch';
+      SFX.swing(input.heavy);
       f.vx += f.facing * 1.5;
       f.x += f.vx; clampStage(f);
       return;
@@ -957,33 +1095,36 @@ function updateFighter(f, input, opp) {
       f.state = 'jump'; f.stateFrame = 0;
       SFX.jump();
     }
-
-    // attacks (grounded only for simplicity)
-    if (input.light && f.state !== 'crouch') {
-      f.state = 'light'; f.stateFrame = 0; f.hitThisAtk = false; f.atkKind = 'stand';
-      f.vx += f.facing * 2;
-    }
-    if (input.heavy && f.state !== 'crouch') {
+    // standing attacks
+    else if (input.heavy && f.state !== 'crouch') {
       f.state = 'heavy'; f.stateFrame = 0; f.hitThisAtk = false; f.atkKind = 'stand';
       f.vx += f.facing * 3;
+      SFX.swing(true);
     }
-    if (input.special && f.special >= SPECIAL_MAX && f.state !== 'crouch') {
+    else if (input.light && f.state !== 'crouch') {
+      f.state = 'light'; f.stateFrame = 0; f.hitThisAtk = false; f.atkKind = 'stand';
+      f.vx += f.facing * 2;
+      SFX.swing(false);
+    }
+    else if (input.special && f.special >= SPECIAL_MAX && f.state !== 'crouch') {
       f.state = 'special'; f.stateFrame = 0; f.hitThisAtk = false;
       f.special = 0;
       startSpecial(f, opp);
-      SFX.special();
+      SFX.special(f);
     }
 
-    if (!moving && f.state !== 'crouch' && f.state !== 'light' && f.state !== 'heavy' && f.state !== 'special') {
+    if (!moving && f.state !== 'crouch' && f.state !== 'light' && f.state !== 'heavy' && f.state !== 'special' && f.state !== 'jump') {
       if (f.state !== 'idle') { f.state = 'idle'; f.stateFrame = 0; }
     } else if (moving && f.state === 'idle') {
       f.state = 'walk'; f.stateFrame = 0;
     }
   } else {
-    // air attacks: dive forward
-    if (input.light || input.heavy) {
+    // air attack: one forward dive per jump
+    if ((input.light || input.heavy) && !f.airAtk) {
       f.state = input.heavy ? 'heavy' : 'light'; f.stateFrame = 0; f.hitThisAtk = false; f.atkKind = 'air';
+      f.airAtk = true;
       f.vx += f.facing * 2.5;
+      SFX.swing(input.heavy);
     }
   }
 
@@ -992,7 +1133,7 @@ function updateFighter(f, input, opp) {
 }
 
 function clampStage(f) {
-  const hw = f.breed.bodyRX + 5;
+  const hw = (f.breed.bodyRX + 5) * ART;
   if (f.x < STAGE_L + hw) { f.x = STAGE_L + hw; f.vx = 0; }
   if (f.x > STAGE_R - hw) { f.x = STAGE_R - hw; f.vx = 0; }
 }
@@ -1068,6 +1209,7 @@ function handleSpecial(f, opp) {
         addShake(MAX_SHAKE);
         spawnParts(f.x, GROUND_Y, 20, '#A67B3D', 6, 20, 4);
       }
+      SFX.quake();
       spawnParts(f.x - 60, GROUND_Y, 8, '#5C3D1E', 4, 15, 3);
       spawnParts(f.x + 60, GROUND_Y, 8, '#5C3D1E', 4, 15, 3);
     }
@@ -1075,9 +1217,7 @@ function handleSpecial(f, opp) {
   } else if (d.type === 'hypnoGaze') {
     if (f.stateFrame === 6 && !d.hit && Math.abs(opp.x - f.x) < 140 * ART) {
       d.hit = true;
-      opp.hitstunTime = 40;
-      opp.state = 'hitstun'; opp.stateFrame = 0;
-      applyHit(opp, f, f.breed.specDmg, 0, 0, opp.x, opp.y - 50*ART);
+      applyHit(opp, f, f.breed.specDmg, 0, 40, opp.x, opp.y - 50*ART);
       spawnParts(opp.x, opp.y - 60*ART, 15, '#FF00FF', 3, 25, 3);
     }
     if (d.timer <= 0) { f.specActive = false; f.state = 'idle'; f.stateFrame = 0; }
@@ -1089,6 +1229,7 @@ function handleSpecial(f, opp) {
 // ═══════════════════════════════════════════════════════════════════
 
 function applyHit(target, attacker, dmg, kb, stunFrames, sparkX, sparkY) {
+  if (target.state === 'ko' || target.invincible > 0) return;
   const blocked = isBlocking(target, attacker);
   const dir = attacker.x < target.x ? 1 : -1;
 
@@ -1098,7 +1239,7 @@ function applyHit(target, attacker, dmg, kb, stunFrames, sparkX, sparkY) {
     target.state = 'blockstun'; target.stateFrame = 0;
     target.blockstunTime = Math.ceil(stunFrames * 0.5);
     spawnParts(sparkX, sparkY, 6, P.blockSpark, 5, 10, 3);
-    spawnHitFx('fx_hit_4', sparkX, sparkY, 60, 12);
+    spawnHitFx('fx_hit_block', sparkX, sparkY, 70, 12);
     SFX.block();
     game.hitPause = 3;
   } else {
@@ -1111,26 +1252,29 @@ function applyHit(target, attacker, dmg, kb, stunFrames, sparkX, sparkY) {
     target.comboCount++;
     target.lastHitDir = dir;
     spawnHitSparks(sparkX, sparkY, dir);
-    spawnHitFx(dmg > 15 ? 'fx_hit_1' : 'fx_hit_3', sparkX, sparkY, dmg > 15 ? 120 : 76, 14);
+    spawnHitFx('fx_hit_5', sparkX, sparkY, dmg > 15 ? 130 : 80, 14);
     addShake(dmg > 15 ? 10 : 5);
-    if (dmg > 15) { SFX.hitHeavy(); game.hitPause = HEAVY_PAUSE; }
+    if (dmg > 15) { SFX.hitHeavy(target); game.hitPause = HEAVY_PAUSE; }
     else { SFX.hitLight(); game.hitPause = HIT_PAUSE; }
   }
 
+  const wasReady = attacker.special >= SPECIAL_MAX || target.special >= SPECIAL_MAX;
   attacker.special = Math.min(SPECIAL_MAX, attacker.special + SPECIAL_GAIN_DEAL);
   target.special = Math.min(SPECIAL_MAX, target.special + SPECIAL_GAIN_TAKE);
+  if (!wasReady && (attacker.special >= SPECIAL_MAX || target.special >= SPECIAL_MAX)) SFX.ready();
 
   if (target.hp <= 0) {
     target.hp = 0;
     target.state = 'ko'; target.stateFrame = 0;
     target.vx = dir * 6;
     target.vy = -6;
+    target.grounded = false;
     game.hitPause = KO_PAUSE;
     addShake(MAX_SHAKE);
-    SFX.ko();
+    SFX.ko(target);
     spawnParts(sparkX, sparkY, 25, P.ko, 8, 25, 5);
     if (img('fx_ko_burst')) spawnHitFx('fx_ko_burst', sparkX, sparkY, 300, 30, { grow: 1.2, spin: 0.15 });
-    else { spawnHitFx('fx_hit_5', sparkX, sparkY, 200, 26); spawnHitFx('fx_hit_6', sparkX, sparkY, 140, 20); }
+    else spawnHitFx('fx_hit_5', sparkX, sparkY, 220, 26);
     spawnHitFx('fx_dust_3', target.x, GROUND_Y - 10, 180, 30, { add: false, rot: 0, spin: 0, grow: 0.7, dy: -14 });
     spawnParts(sparkX, sparkY, 15, P.gold, 6, 30, 4);
   }
@@ -1168,7 +1312,6 @@ function pushApart(f1, f2) {
 const ai = {
   decision: 'wait',
   timer: 0,
-  reactTimer: 0,
   difficulty: 0.5,
 };
 
@@ -3445,7 +3588,7 @@ function drawStageSelect() {
 // ═══════════════════════════════════════════════════════════════════
 
 const game = {
-  state: 'title',
+  state: 'loading',
   frame: 0,
   f1: null, f2: null,
   vsAI: true,
@@ -3458,7 +3601,6 @@ const game = {
   introText: '',
   matchWinner: 0,
   winStreak: 0,
-  p1Confirmed: false, p2Confirmed: false,
   pauseMenu: 0,
   stage: 0, stageSelect: 0,
   roundWinner: 1, endReason: 'ko', perfect: false,
@@ -3469,6 +3611,11 @@ const game = {
 
 function confirm() {
   return wasPressed('Enter') || wasPressed('NumpadEnter') || touchJust.confirm;
+}
+
+function updateLoading() {
+  // wait for the art and sounds, but never hang on a stalled request
+  if (loadState.done >= loadState.total || game.frame > 60 * 10) game.state = 'title';
 }
 
 function updateTitle() {
@@ -3492,30 +3639,26 @@ function updateModeSelect() {
     game.vsAI = game.modeSelect === 0;
     game.state = 'charSelect';
     game.p1Select = 0;
-    game.p2Select = game.vsAI ? rndInt(0, 3) : 1;
-    game.p1Confirmed = false;
-    game.p2Confirmed = false;
+    game.p2Select = game.vsAI ? rndInt(1, 3) : 1;
     SFX.select();
   }
 }
 
 function updateCharSelect() {
   // P1 selection
-  if (!game.p1Confirmed) {
-    if (wasPressed('KeyA') || touchJust.left) {
-      game.p1Select = (game.p1Select + 3) % 4;
-      if (game.p1Select === game.p2Select) game.p1Select = (game.p1Select + 3) % 4;
-      SFX.move();
-    }
-    if (wasPressed('KeyD') || touchJust.right) {
-      game.p1Select = (game.p1Select + 1) % 4;
-      if (game.p1Select === game.p2Select) game.p1Select = (game.p1Select + 1) % 4;
-      SFX.move();
-    }
+  if (wasPressed('KeyA') || touchJust.left) {
+    game.p1Select = (game.p1Select + 3) % 4;
+    if (game.p1Select === game.p2Select) game.p1Select = (game.p1Select + 3) % 4;
+    SFX.move();
+  }
+  if (wasPressed('KeyD') || touchJust.right) {
+    game.p1Select = (game.p1Select + 1) % 4;
+    if (game.p1Select === game.p2Select) game.p1Select = (game.p1Select + 1) % 4;
+    SFX.move();
   }
 
   // P2 selection (only in 2P mode)
-  if (!game.vsAI && !game.p2Confirmed) {
+  if (!game.vsAI) {
     if (wasPressed('ArrowLeft')) {
       game.p2Select = (game.p2Select + 3) % 4;
       if (game.p2Select === game.p1Select) game.p2Select = (game.p2Select + 3) % 4;
@@ -3540,8 +3683,10 @@ function updateCharSelect() {
     if (game.p1Select === i) goFight = true;
     else if (i !== game.p2Select || !game.vsAI) { game.p1Select = i; if (game.vsAI && game.p2Select === i) game.p2Select = (i + 1) % 4; SFX.move(); }
   }
+  if (wasPressed('Escape')) { game.state = 'modeSelect'; SFX.back(); return; }
   if (confirm() || goFight) {
     game.state = 'stageSelect';
+    SFX.meow(BREEDS[BREED_KEYS[game.p1Select]]);
     SFX.select();
   }
 }
@@ -3553,7 +3698,7 @@ function updateStageSelect() {
   if (wasPressed('KeyD') || wasPressed('ArrowRight') || touchJust.right) {
     game.stageSelect = (game.stageSelect + 1) % STAGES.length; SFX.move();
   }
-  if (wasPressed('Escape')) { game.state = 'charSelect'; SFX.move(); return; }
+  if (wasPressed('Escape')) { game.state = 'charSelect'; SFX.back(); return; }
   let go = false;
   for (let i = 0; i < STAGES.length; i++) if (tapIn(150 + i * 220 - 105, 250 - 120, 210, 260)) { if (game.stageSelect === i) go = true; else { game.stageSelect = i; SFX.move(); } }
   if (confirm() || go) {
@@ -3567,8 +3712,7 @@ function startMatch() {
   game.f1 = createFighter(BREED_KEYS[game.p1Select], 250, 1);
   game.f2 = createFighter(BREED_KEYS[game.p2Select], W - 250, -1);
   game.round = 1;
-  game.f1.wins = 0;
-  game.f2.wins = 0;
+  ai.timer = 0; ai.decision = 'wait';
   startRound();
 }
 
@@ -3579,36 +3723,30 @@ function startRound() {
   game.roundTimer = ROUND_TIME;
   game.hitPause = 0;
 
-  // reset fighter positions and HP
-  game.f1.x = 250; game.f1.y = GROUND_Y;
-  game.f1.vx = 0; game.f1.vy = 0;
-  game.f1.hp = game.f1.maxHp; game.f1.displayHp = game.f1.maxHp;
-  game.f1.special = 0; game.f1.state = 'idle'; game.f1.stateFrame = 0;
-  game.f1.grounded = true; game.f1.hitThisAtk = false;
-  game.f1.hitstunTime = 0; game.f1.blockstunTime = 0;
-  game.f1.invincible = 0; game.f1.flashTimer = 0;
-  game.f1.specActive = false; game.f1.specData = null; game.f1.winPose = false;
-  game.f1.facing = 1;
-
-  game.f2.x = W - 250; game.f2.y = GROUND_Y;
-  game.f2.vx = 0; game.f2.vy = 0;
-  game.f2.hp = game.f2.maxHp; game.f2.displayHp = game.f2.maxHp;
-  game.f2.special = 0; game.f2.state = 'idle'; game.f2.stateFrame = 0;
-  game.f2.grounded = true; game.f2.hitThisAtk = false;
-  game.f2.hitstunTime = 0; game.f2.blockstunTime = 0;
-  game.f2.invincible = 0; game.f2.flashTimer = 0;
-  game.f2.specActive = false; game.f2.specData = null; game.f2.winPose = false;
-  game.f2.facing = -1;
+  resetFighter(game.f1, 250, 1);
+  resetFighter(game.f2, W - 250, -1);
 
   particles.length = 0;
+  hitFx.length = 0;
   shakeAmt = 0;
   SFX.bell();
+}
+
+function resetFighter(f, x, facing) {
+  Object.assign(f, {
+    x, y: GROUND_Y, vx: 0, vy: 0, facing,
+    hp: f.maxHp, displayHp: f.maxHp, special: 0,
+    state: 'idle', stateFrame: 0, grounded: true,
+    hitThisAtk: false, hitstunTime: 0, blockstunTime: 0, invincible: 0, flashTimer: 0, comboCount: 0,
+    specActive: false, specData: null, winPose: false, atkKind: 'stand', airAtk: false,
+  });
 }
 
 function updateRoundIntro() {
   game.introTimer--;
   if (game.introTimer === 30) {
     game.introText = 'FIGHT!';
+    SFX.fight();
   }
   if (game.introTimer <= 0) {
     game.state = 'fighting';
@@ -3619,7 +3757,7 @@ function updateFighting() {
   if (wasPressed('Space') || wasPressed('Escape') || touchJust.pause) {
     game.state = 'paused';
     game.pauseMenu = 0;
-    SFX.select();
+    SFX.pause();
     return;
   }
 
@@ -3630,12 +3768,16 @@ function updateFighting() {
   }
 
   // timer
+  const secsBefore = Math.ceil(game.roundTimer);
   game.roundTimer -= 1/60;
   if (game.roundTimer <= 0) {
     game.roundTimer = 0;
-    endRound(game.f1.hp >= game.f2.hp ? 1 : 2, 'time');
+    SFX.bell();
+    // most health left wins, as a share of each fighter's own maximum
+    endRound(game.f1.hp / game.f1.maxHp >= game.f2.hp / game.f2.maxHp ? 1 : 2, 'time');
     return;
   }
+  if (secsBefore <= 10 && Math.ceil(game.roundTimer) < secsBefore) SFX.tick();
 
   // input
   const inp1 = p1Input();
@@ -3679,9 +3821,10 @@ function updatePaused() {
   }
   if (wasPressed('Space') || wasPressed('Escape') || touchJust.pause) {
     game.state = 'fighting';
-    SFX.select();
+    SFX.pause();
     return;
   }
+  if (tapIn(W/2 - 110, H - 82, 220, 30)) { toggleMute(); SFX.move(); return; }
   if (confirm() || tapped) {
     if (game.pauseMenu === 0) {
       game.state = 'fighting';
@@ -3694,9 +3837,11 @@ function updatePaused() {
       SFX.select();
     } else if (game.pauseMenu === 2) {
       game.state = 'title';
+      game.winStreak = 0;
       particles.length = 0;
+      hitFx.length = 0;
       shakeAmt = 0;
-      SFX.select();
+      SFX.back();
     }
   }
 }
@@ -3719,9 +3864,10 @@ function updateControls() {
     return;
   }
 
-  if (wasPressed('Escape') || wasPressed('Space') || touchJust.pause) {
+  // rebinding needs a keyboard, so on a touch screen any tap goes back
+  if (wasPressed('Escape') || wasPressed('Space') || (touchActive && touchJust.any)) {
     game.state = 'paused';
-    SFX.move();
+    SFX.back();
     return;
   }
 
@@ -3768,28 +3914,35 @@ function endRound(winner, reason) {
   else { game.f2.wins++; game.f2.winPose = true; game.introText = `${game.f2.breed.name} WINS!`; }
 }
 
+const NO_INPUT = { left:false, right:false, up:false, down:false, light:false, heavy:false, special:false, block:false };
+
+// after the round is decided: let the knockout land and the winner settle into a pose
+function settleFighters() {
+  if (game.hitPause > 0) { game.hitPause--; return; }
+  game.f1.currentInput = game.f2.currentInput = NO_INPUT;
+  updateFighter(game.f1, NO_INPUT, game.f2);
+  updateFighter(game.f2, NO_INPUT, game.f1);
+}
+
 function updateRoundEnd() {
   game.introTimer--;
+  settleFighters();
   updateParticles();
 
-  // smooth HP display
-  game.f1.displayHp = lerp(game.f1.displayHp, game.f1.hp, 0.12);
-  game.f2.displayHp = lerp(game.f2.displayHp, game.f2.hp, 0.12);
-
-  if (game.introTimer <= 0 || confirm()) {
+  if (game.introTimer <= 0 || ((confirm() || touchJust.any) && game.introTimer < 80)) {
     // check match winner
     if (game.f1.wins >= WINS_NEEDED) {
       game.state = 'matchEnd';
       game.matchWinner = 1;
       game.introTimer = 180;
-      game.winStreak++;
-      saveHighScore(game.winStreak);
-      SFX.win();
+      if (game.vsAI) { game.winStreak++; saveHighScore(game.winStreak); }
+      SFX.win(game.f1);
     } else if (game.f2.wins >= WINS_NEEDED) {
       game.state = 'matchEnd';
       game.matchWinner = 2;
       game.introTimer = 180;
       game.winStreak = 0;
+      SFX.win(game.f2);
     } else {
       game.round++;
       startRound();
@@ -3799,6 +3952,7 @@ function updateRoundEnd() {
 
 function updateMatchEnd() {
   game.introTimer--;
+  settleFighters();
   updateParticles();
 
   // victory particles
@@ -3807,11 +3961,12 @@ function updateMatchEnd() {
     spawnParts(wx + rnd(-30, 30), GROUND_Y - rnd(20, 80), 3, P.gold, 3, 20, 3);
   }
 
-  if ((game.introTimer <= 0 || confirm()) && game.introTimer < 150) {
+  // stays up until the player continues
+  if ((confirm() || touchJust.any) && game.introTimer < 120) {
     game.state = 'charSelect';
-    game.p1Confirmed = false;
-    game.p2Confirmed = false;
+    if (game.vsAI) game.p2Select = (game.p1Select + rndInt(1, 3)) % 4;   // a new challenger
     particles.length = 0;
+    hitFx.length = 0;
     SFX.select();
   }
 }
@@ -3885,7 +4040,7 @@ function drawMatchEnd() {
     if (img('ban_win_streak')) { drawImg('ban_win_streak', tx - 50, H/2 + 138, 34); drawDigits(game.winStreak, tx + 60, H/2 + 138, 26, 2); }
     else scratchText(`Win Streak: ${game.winStreak}`, tx, H/2 + 104, 16, P.gold);
   }
-  if (game.introTimer < 140 && Math.floor(game.frame / 25) % 2 === 0) {
+  if (game.introTimer < 120 && Math.floor(game.frame / 25) % 2 === 0) {
     if (!drawImg('ban_press_enter', W/2, H - 44, 44, { dx: (Math.random() - 0.5) * 3 })) sprayText('PRESS ENTER', W/2, H/2 + 104, 26, '#F4F4F4', { jitter: 2, seed: 19, drips: false, outline: '#0A0608' });
   }
 }
@@ -3915,9 +4070,11 @@ function drawPaused() {
     }
   }
 
-  ctx.font = '14px monospace';
-  ctx.fillStyle = '#555';
-  ctx.fillText('SPACE / ESC to resume', W/2, H - 40);
+  scratchText(muted ? 'SOUND: OFF' : 'SOUND: ON', W/2, H - 62, 16, muted ? '#888' : P.p2);
+  ctx.font = '13px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#777';
+  ctx.fillText(touchActive ? 'tap II to resume  ·  tap SOUND to toggle' : 'SPACE / ESC to resume  ·  M toggles sound', W/2, H - 38);
 }
 
 function drawControls() {
@@ -3977,7 +4134,7 @@ function drawControls() {
   ctx.textAlign = 'center';
   ctx.font = '13px monospace';
   ctx.fillStyle = '#555';
-  ctx.fillText('↑↓ select  ←→ switch player  ENTER rebind  R reset defaults  ESC back', W/2, H - 40);
+  ctx.fillText(touchActive ? 'key bindings need a keyboard  ·  tap anywhere to go back' : '↑↓ select  ←→ switch player  ENTER rebind  R reset defaults  ESC back', W/2, H - 40);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -4023,6 +4180,7 @@ function gameLoop(timestamp) {
 
 function tick() {
   switch (game.state) {
+    case 'loading': updateLoading(); break;
     case 'title': updateTitle(); break;
     case 'modeSelect': updateModeSelect(); break;
     case 'charSelect': updateCharSelect(); break;
@@ -4036,7 +4194,25 @@ function tick() {
   }
 }
 
+// the fighter in mid-attack is drawn in front
+function drawFighters() {
+  const attacking = f => f.state === 'light' || f.state === 'heavy' || f.state === 'special';
+  if (attacking(game.f1) && !attacking(game.f2)) { drawCat(game.f2); drawCat(game.f1); }
+  else { drawCat(game.f1); drawCat(game.f2); }
+}
+
+function drawLoading() {
+  ctx.fillStyle = '#08060C';
+  ctx.fillRect(0, 0, W, H);
+  sprayText('CATFIGHTER', W / 2, H / 2 - 10, 72, P.p1, { seed: 3, outline: '#14060C', drips: false });
+  const k = loadState.total ? loadState.done / loadState.total : 0;
+  ctx.fillStyle = '#241828'; ctx.fillRect(W / 2 - 160, H / 2 + 30, 320, 8);
+  ctx.fillStyle = P.p2; ctx.fillRect(W / 2 - 160, H / 2 + 30, 320 * k, 8);
+  scratchText('LOADING', W / 2, H / 2 + 66, 14, '#888');
+}
+
 function render() {
+  ctx.setTransform(RS, 0, 0, RS, 0, 0);
   ctx.save();
 
   // screen shake
@@ -4044,6 +4220,9 @@ function render() {
   ctx.translate(shake.x, shake.y);
 
   switch (game.state) {
+    case 'loading':
+      drawLoading();
+      break;
     case 'title':
       drawTitle();
       break;
@@ -4058,37 +4237,32 @@ function render() {
       break;
     case 'roundIntro':
       drawStage();
-      drawCat(game.f1);
-      drawCat(game.f2);
+      drawFighters();
       drawHUD();
       drawRoundIntro();
       break;
     case 'fighting':
       drawStage();
-      drawCat(game.f1);
-      drawCat(game.f2);
+      drawFighters();
       drawParticles();
       drawHitFx();
       drawHUD();
       break;
     case 'paused':
       drawStage();
-      drawCat(game.f1);
-      drawCat(game.f2);
+      drawFighters();
       drawHUD();
       drawPaused();
       break;
     case 'controls':
       drawStage();
-      drawCat(game.f1);
-      drawCat(game.f2);
+      drawFighters();
       drawHUD();
       drawControls();
       break;
     case 'roundEnd':
       drawStage();
-      drawCat(game.f1);
-      drawCat(game.f2);
+      drawFighters();
       drawParticles();
       drawHitFx();
       drawHUD();
@@ -4096,8 +4270,7 @@ function render() {
       break;
     case 'matchEnd':
       drawStage();
-      drawCat(game.f1);
-      drawCat(game.f2);
+      drawFighters();
       drawParticles();
       drawHitFx();
       drawHUD();
@@ -4113,7 +4286,6 @@ function render() {
 //  Init
 // ═══════════════════════════════════════════════════════════════════
 
-canvas.addEventListener('click', () => ensureAudio());
 requestAnimationFrame(gameLoop);
 
 </script>

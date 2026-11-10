@@ -5,7 +5,7 @@ const OUTDIR = process.argv[3];
 const PANELS = JSON.parse(fs.readFileSync(process.argv[4], 'utf8'));
 fs.mkdirSync(OUTDIR, { recursive: true });
 
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
+const browser = await chromium.launch({ args: ['--no-sandbox'] });
 const page = await browser.newPage();
 const b64 = fs.readFileSync(SRC).toString('base64');
 await page.setContent(`<img id="src" src="data:image/png;base64,${b64}">`);
