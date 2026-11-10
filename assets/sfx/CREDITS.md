@@ -13,7 +13,7 @@ The source file is `https://opengameart.org/sites/default/files/<download>`.
 | `hit_1` `hit_2` `hit_3` | heavy hits | 37 hits/punches | Independent.nu (submitted by qubodup) | `independent_nu_ljudbank-hits_and_punches.7z` | `hit22`, `hit24`, `hit37` |
 | `ko` | knock-out blow | 37 hits/punches | Independent.nu | as above | `hit21` |
 | `quake` | Brutus' ground pound | 37 hits/punches | Independent.nu | as above | `hit35` |
-| `block_1` `block_2` | blocked hits | Thwack Sounds | AntumDeluge | `thwack-1.0.zip` | `thwack-02.wav`, `thwack-06.wav` |
+| `block_1` `block_2` | blocked hits, guard break (pitched down, with `boom`) | Thwack Sounds | AntumDeluge | `thwack-1.0.zip` | `thwack-02.wav`, `thwack-06.wav` |
 | `land` | landing from a jump | Thwack Sounds | AntumDeluge | as above | `thwack-03.wav` |
 | `swish_1` `swish_2` `swish_3` | light swings | Swishes Sound Pack | artisticdude | `swishes.zip` | `swish-10/11/12.wav` |
 | `swoosh_1` `swoosh_2` | heavy swings, furball, shadow dash | Swishes Sound Pack | artisticdude | as above | `swish-7.wav`, `swish-9.wav` |
